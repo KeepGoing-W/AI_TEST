@@ -1,0 +1,30 @@
+@import "./tokens.css";
+@import "./reset.css";
+
+body {
+  font-size: 14px;
+}
+
+.n-button--primary-type {
+  --n-color: var(--color-primary) !important;
+  --n-color-hover: var(--color-primary-hover) !important;
+  --n-color-pressed: var(--color-primary-hover) !important;
+  --n-color-focus: var(--color-primary) !important;
+}
+
+@media (max-width: 1279px) {
+  :root {
+    --page-padding: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
