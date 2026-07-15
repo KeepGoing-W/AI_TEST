@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.common.models import Base
 from app.config import get_settings
 import app.modules.users.models  # noqa: F401
+import app.modules.projects.models  # noqa: F401
+import app.modules.environments.models  # noqa: F401
+import app.modules.llm_configs.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

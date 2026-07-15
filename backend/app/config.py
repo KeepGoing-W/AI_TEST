@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Self
 
 from pydantic import SecretStr, field_validator, model_validator
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str
     jwt_secret: SecretStr
+    encryption_key: SecretStr
     jwt_issuer: str = "ai-api-test-platform"
     jwt_access_token_expire_minutes: int = 60
     initial_admin_username: str | None = None
@@ -20,6 +22,9 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     default_request_timeout_seconds: int = 20
     max_response_body_bytes: int = 1_048_576
+    source_root_allowlist: str = ""
+    source_upload_root: Path = Path("data/source-uploads")
+    max_source_archive_bytes: int = 524_288_000
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
