@@ -13,6 +13,7 @@ class TaskType(str, enum.Enum):
     """后台任务类型。"""
 
     SOURCE_SCAN = "source_scan"
+    KNOWLEDGE_EMBEDDING = "knowledge_embedding"
 
 
 class TaskStatus(str, enum.Enum):

@@ -1,10 +1,14 @@
 import asyncio
 import logging
+from uuid import UUID
 
 from sqlalchemy import func
 
 from app.config import get_settings
 from app.database import async_session_factory
+from app.modules.knowledge.chunker import build_knowledge_chunks
+from app.modules.knowledge.embedding import create_embedding_task, process_embedding_task
+from app.modules.knowledge.repository import KnowledgeRepository
 from app.modules.projects.repository import ProjectRepository
 from app.modules.source_scans.java_parser import JavaParseError, parse_java_sources
 from app.modules.source_scans.models import (
@@ -14,6 +18,7 @@ from app.modules.source_scans.models import (
     SourceFile,
     SymbolRelation,
     SymbolType,
+    TaskStatus,
     TaskType,
 )
 from app.modules.source_scans.reader import SourceReadError, discover_java_files
@@ -53,14 +58,20 @@ class TaskWorker:
                 task = await SourceScanRepository(session).claim_next_task()
                 if task is None:
                     return False
-                scan = await SourceScanRepository(session).get_scan_by_task_id(task.id)
-                if scan is None:
-                    return True
-                await mark_scan_running(session, task, scan)
-                task.started_at = func.now()
-                scan.started_at = func.now()
+                if task.task_type == TaskType.KNOWLEDGE_EMBEDDING:
+                    task.started_at = func.now()
+                else:
+                    scan = await SourceScanRepository(session).get_scan_by_task_id(task.id)
+                    if scan is None:
+                        return True
+                    await mark_scan_running(session, task, scan)
+                    task.started_at = func.now()
+                    scan.started_at = func.now()
 
             try:
+                if task.task_type == TaskType.KNOWLEDGE_EMBEDDING:
+                    await process_embedding_task(session, task)
+                    return True
                 if task.task_type != TaskType.SOURCE_SCAN:
                     raise ValueError("UNSUPPORTED_TASK_TYPE")
                 async with session.begin():
@@ -212,11 +223,22 @@ class TaskWorker:
                         source_api.conflicts = conflicts
                         source_api.is_conflicted = bool(conflicts)
                     repository.add_api_definitions(api_definitions)
+                    knowledge_repository = KnowledgeRepository(session)
+                    knowledge_chunks = build_knowledge_chunks(
+                        scan.project_id,
+                        scan.id,
+                        source_files,
+                        code_symbols,
+                    )
+                    knowledge_repository.add_chunks(knowledge_chunks)
+                    await session.flush()
+                    await create_embedding_task(session, scan.project_id, scan.id, scan.created_by)
                     summary = discovery.summary() | {
                         "apiDefinitions": len(api_definitions),
                         "openapiDefinitions": len(openapi_operations),
                         "codeSymbols": len(code_symbols),
                         "symbolRelations": len(symbol_relations),
+                        "knowledgeChunks": len(knowledge_chunks),
                     }
                     await mark_scan_succeeded(session, task, scan, summary)
                     task.completed_at = func.now()
@@ -248,6 +270,12 @@ class TaskWorker:
             except Exception:
                 logger.exception("后台任务执行失败，task_id=%s", task.id)
                 async with session.begin():
+                    if task.task_type == TaskType.KNOWLEDGE_EMBEDDING:
+                        task.status = TaskStatus.FAILED
+                        task.error_code = "KNOWLEDGE_EMBEDDING_TASK_FAILED"
+                        task.error_message = "知识向量任务执行失败"
+                        task.completed_at = func.now()
+                        return True
                     scan = await SourceScanRepository(session).get_scan_by_task_id(task.id)
                     if scan is not None:
                         await mark_scan_failed(session, task, scan, "SOURCE_SCAN_TASK_FAILED", "源码扫描任务执行失败")

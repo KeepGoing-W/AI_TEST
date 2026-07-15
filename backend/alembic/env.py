@@ -13,6 +13,7 @@ import app.modules.projects.models  # noqa: F401
 import app.modules.environments.models  # noqa: F401
 import app.modules.llm_configs.models  # noqa: F401
 import app.modules.source_scans.models  # noqa: F401
+import app.modules.knowledge.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

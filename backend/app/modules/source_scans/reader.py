@@ -147,6 +147,12 @@ def _validate_local_root(root: Path, settings: Settings) -> Path:
     return resolved_root
 
 
+def validate_local_source_root(root: Path, settings: Settings) -> Path:
+    """供受控检索复用本地源码根目录边界校验。"""
+
+    return _validate_local_root(root, settings)
+
+
 def _validate_uploaded_archive(archive_path: Path, settings: Settings) -> Path:
     try:
         resolved_archive = archive_path.resolve(strict=True)

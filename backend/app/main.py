@@ -16,6 +16,7 @@ from app.database import engine, async_session_factory
 from app.modules.auth.router import router as auth_router
 from app.modules.environments.router import router as environments_router
 from app.modules.llm_configs.router import router as llm_configs_router
+from app.modules.knowledge.router import router as knowledge_router
 from app.modules.projects.router import router as projects_router
 from app.modules.source_scans.router import router as source_scans_router
 from app.modules.users.router import router as users_router
@@ -45,6 +46,7 @@ app = FastAPI(title="AI 接口测试 Agent 平台", version="0.1.0", lifespan=li
 app.include_router(auth_router, prefix=settings.api_v1_prefix)
 app.include_router(environments_router, prefix=settings.api_v1_prefix)
 app.include_router(llm_configs_router, prefix=settings.api_v1_prefix)
+app.include_router(knowledge_router, prefix=settings.api_v1_prefix)
 app.include_router(projects_router, prefix=settings.api_v1_prefix)
 app.include_router(source_scans_router, prefix=settings.api_v1_prefix)
 app.include_router(users_router, prefix=settings.api_v1_prefix)

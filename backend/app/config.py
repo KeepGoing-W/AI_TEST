@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     max_source_file_count: int = 10_000
     max_source_total_bytes: int = 104_857_600
     max_openapi_document_bytes: int = 5_242_880
+    embedding_dimensions: int = 1536
+    embedding_model: str | None = None
+    embedding_batch_size: int = 32
+    embedding_max_attempts: int = 3
+    embedding_timeout_seconds: int = 30
+    knowledge_context_max_results: int = 20
+    knowledge_context_max_characters: int = 12_000
+    knowledge_vector_candidate_count: int = 20
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -48,6 +56,15 @@ class Settings(BaseSettings):
 
         if value is not None and len(value.get_secret_value()) < 12:
             raise ValueError("INITIAL_ADMIN_PASSWORD 至少需要 12 个字符")
+        return value
+
+    @field_validator("embedding_dimensions")
+    @classmethod
+    def validate_embedding_dimensions(cls, value: int) -> int:
+        """当前 pgvector 索引固定使用 1536 维向量。"""
+
+        if value != 1536:
+            raise ValueError("EMBEDDING_DIMENSIONS 当前必须为 1536")
         return value
 
     @model_validator(mode="after")
