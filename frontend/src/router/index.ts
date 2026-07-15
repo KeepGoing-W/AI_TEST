@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import AppShell from "@/layouts/AppShell.vue";
 import LoginView from "@/views/auth/LoginView.vue";
 import ProjectListView from "@/views/projects/ProjectListView.vue";
+import ApiDefinitionView from "@/views/api-definitions/ApiDefinitionView.vue";
 import { useAuthStore } from "@/stores/auth";
 
 const router = createRouter({
@@ -15,7 +16,8 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: "", redirect: { name: "projects" } },
-        { path: "projects", name: "projects", component: ProjectListView }
+        { path: "projects", name: "projects", component: ProjectListView },
+        { path: "api-definitions", name: "api-definitions", component: ApiDefinitionView }
       ]
     }
   ]

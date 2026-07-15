@@ -133,6 +133,7 @@ CREATE TABLE source_scans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     source_artifact_id UUID REFERENCES source_artifacts(id) ON DELETE SET NULL,
+    background_task_id UUID NOT NULL UNIQUE,
     scan_version INTEGER NOT NULL,
     status scan_status NOT NULL DEFAULT 'pending',
     started_at TIMESTAMPTZ,
@@ -476,6 +477,10 @@ CREATE TABLE background_tasks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT ck_background_tasks_time CHECK (completed_at IS NULL OR started_at IS NULL OR completed_at >= started_at)
 );
+
+ALTER TABLE source_scans
+    ADD CONSTRAINT fk_source_scans_background_task
+    FOREIGN KEY (background_task_id) REFERENCES background_tasks(id) ON DELETE CASCADE;
 
 CREATE INDEX idx_projects_created_by ON projects(created_by);
 CREATE INDEX idx_project_members_user ON project_members(user_id);

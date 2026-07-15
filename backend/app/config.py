@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     source_root_allowlist: str = ""
     source_upload_root: Path = Path("data/source-uploads")
     max_source_archive_bytes: int = 524_288_000
+    max_source_file_bytes: int = 1_048_576
+    max_source_file_count: int = 10_000
+    max_source_total_bytes: int = 104_857_600
+    max_openapi_document_bytes: int = 5_242_880
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -3,6 +3,7 @@ import { ofetch } from "ofetch";
 import type { ApiErrorResponse } from "@/types/domain";
 
 const accessTokenKey = "ai-test-platform.access-token";
+export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 export class ApiRequestError extends Error {
   readonly code: string;
@@ -18,7 +19,7 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
 }
 
 export const apiClient = ofetch.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1",
+  baseURL: apiBaseUrl,
   onRequest({ options }) {
     const accessToken = window.localStorage.getItem(accessTokenKey);
     if (accessToken === null) {

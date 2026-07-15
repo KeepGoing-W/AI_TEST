@@ -23,7 +23,7 @@ from app.modules.projects.schemas import (
     UpdateProjectRequest,
 )
 from app.modules.projects.service import add_project_member, configure_local_source, configure_zip_source, create_project, delete_project, remove_project_member, update_project
-from app.modules.projects.service import configure_openapi_url
+from app.modules.projects.service import configure_openapi_file, configure_openapi_url
 from app.modules.users.models import User, UserRole
 
 router = APIRouter(prefix="/projects", tags=["项目管理"])
@@ -38,6 +38,21 @@ async def get_openapi_source(project: AccessibleProject, request: Request) -> Re
 async def set_openapi_url(project: AccessibleProject, payload: OpenApiUrlRequest, request: Request, session: Annotated[AsyncSession, Depends(get_db_session)], _: CurrentAdmin) -> Response:
     updated = await configure_openapi_url(session, project, payload.url)
     return success_response(data=OpenApiSourceResponse(source_type=updated.openapi_source_type, configured=True).model_dump(), request_id=request.state.request_id)
+
+
+@router.put("/{project_id}/openapi/file")
+async def set_openapi_file(
+    project: AccessibleProject,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: CurrentAdmin,
+    file: UploadFile = File(...),
+) -> Response:
+    updated = await configure_openapi_file(session, project, await file.read(), file.filename or "openapi.yaml")
+    return success_response(
+        data=OpenApiSourceResponse(source_type=updated.openapi_source_type, configured=True).model_dump(),
+        request_id=request.state.request_id,
+    )
 
 
 @router.get("/{project_id}/source")

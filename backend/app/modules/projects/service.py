@@ -124,3 +124,21 @@ async def configure_openapi_url(session: AsyncSession, project: Project, url: st
     await session.commit()
     await session.refresh(project)
     return project
+
+
+async def configure_openapi_file(session: AsyncSession, project: Project, content: bytes, filename: str) -> Project:
+    """保存受控 OpenAPI 文件来源。"""
+
+    if len(content) > get_settings().max_openapi_document_bytes:
+        raise AppError("OPENAPI_DOCUMENT_TOO_LARGE", "OpenAPI 文件超过大小限制", 400)
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".json", ".yaml", ".yml"}:
+        raise AppError("OPENAPI_FILE_INVALID", "OpenAPI 文件格式无效", 400)
+    destination = get_settings().source_upload_root.resolve() / "openapi" / f"{uuid4()}{suffix}"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(content)
+    project.openapi_source_type = OpenApiSourceType.FILE
+    project.openapi_location = str(destination)
+    await session.commit()
+    await session.refresh(project)
+    return project

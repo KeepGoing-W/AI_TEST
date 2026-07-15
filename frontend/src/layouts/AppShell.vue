@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { FolderKanban, LogOut, TestTube2 } from "lucide-vue-next";
+import { FolderKanban, LogOut, ScanSearch, TestTube2 } from "lucide-vue-next";
 import { NButton, NDropdown } from "naive-ui";
 
 import { useAuthStore } from "@/stores/auth";
@@ -32,6 +32,11 @@ function handleUserAction(key: string): void {
           <span class="navigation-rail" aria-hidden="true"></span>
           <FolderKanban :size="20" aria-hidden="true" />
           <span class="navigation-label">项目管理</span>
+        </RouterLink>
+        <RouterLink class="navigation-item" :to="{ name: 'api-definitions' }">
+          <span class="navigation-rail" aria-hidden="true"></span>
+          <ScanSearch :size="20" aria-hidden="true" />
+          <span class="navigation-label">接口发现</span>
         </RouterLink>
       </nav>
       <div class="sidebar-footer">

@@ -76,8 +76,10 @@ class ProjectRepository:
         statement = select(SourceArtifact).where(SourceArtifact.project_id == project_id).order_by(SourceArtifact.created_at.desc())
         return await self.session.scalar(statement)
 
+    async def get_source_artifact_by_id(self, artifact_id: UUID) -> SourceArtifact | None:
+        return await self.session.get(SourceArtifact, artifact_id)
+
     async def replace_source_artifact(self, artifact: SourceArtifact) -> None:
-        existing = await self.get_source_artifact(artifact.project_id)
-        if existing is not None:
-            await self.session.delete(existing)
+        """保存新的源码来源，并保留历史扫描对应的来源记录。"""
+
         self.session.add(artifact)

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -16,8 +17,10 @@ from app.modules.auth.router import router as auth_router
 from app.modules.environments.router import router as environments_router
 from app.modules.llm_configs.router import router as llm_configs_router
 from app.modules.projects.router import router as projects_router
+from app.modules.source_scans.router import router as source_scans_router
 from app.modules.users.router import router as users_router
 from app.modules.users.service import initialize_admin_user
+from app.workers.task_worker import TaskWorker
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -28,8 +31,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
     async with async_session_factory() as session:
         await initialize_admin_user(session)
-    yield
-    await engine.dispose()
+    worker = TaskWorker()
+    worker_task = asyncio.create_task(worker.run())
+    try:
+        yield
+    finally:
+        worker.stop()
+        await worker_task
+        await engine.dispose()
 
 
 app = FastAPI(title="AI 接口测试 Agent 平台", version="0.1.0", lifespan=lifespan)
@@ -37,6 +46,7 @@ app.include_router(auth_router, prefix=settings.api_v1_prefix)
 app.include_router(environments_router, prefix=settings.api_v1_prefix)
 app.include_router(llm_configs_router, prefix=settings.api_v1_prefix)
 app.include_router(projects_router, prefix=settings.api_v1_prefix)
+app.include_router(source_scans_router, prefix=settings.api_v1_prefix)
 app.include_router(users_router, prefix=settings.api_v1_prefix)
 
 
