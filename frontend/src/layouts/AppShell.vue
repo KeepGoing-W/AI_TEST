@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { FolderKanban, LogOut, ScanSearch, TestTube2 } from "lucide-vue-next";
+import { Bot, ClipboardCheck, FolderKanban, LogOut, PlayCircle, ScanSearch, TestTube2 } from "lucide-vue-next";
 import { NButton, NDropdown } from "naive-ui";
 
 import { useAuthStore } from "@/stores/auth";
@@ -37,6 +37,21 @@ function handleUserAction(key: string): void {
           <span class="navigation-rail" aria-hidden="true"></span>
           <ScanSearch :size="20" aria-hidden="true" />
           <span class="navigation-label">接口发现</span>
+        </RouterLink>
+        <RouterLink class="navigation-item" :to="{ name: 'analysis' }">
+          <span class="navigation-rail" aria-hidden="true"></span>
+          <Bot :size="20" aria-hidden="true" />
+          <span class="navigation-label">AI 分析</span>
+        </RouterLink>
+        <RouterLink class="navigation-item" :to="{ name: 'testcases' }">
+          <span class="navigation-rail" aria-hidden="true"></span>
+          <ClipboardCheck :size="20" aria-hidden="true" />
+          <span class="navigation-label">用例管理</span>
+        </RouterLink>
+        <RouterLink class="navigation-item" :to="{ name: 'executions' }">
+          <span class="navigation-rail" aria-hidden="true"></span>
+          <PlayCircle :size="20" aria-hidden="true" />
+          <span class="navigation-label">测试执行</span>
         </RouterLink>
       </nav>
       <div class="sidebar-footer">

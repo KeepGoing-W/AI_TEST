@@ -24,11 +24,13 @@ class KeywordSearchHit:
 def search_with_ripgrep(artifact: SourceArtifact | None, keyword: str, settings: Settings) -> list[KeywordSearchHit]:
     """仅在已登记本地目录内使用固定参数的 ripgrep 搜索 Java 源码。"""
 
+    # 仅支持登记的本地源码目录；ZIP 快照不允许为了搜索而解压到任意位置。
     if artifact is None or artifact.source_type != SourceType.LOCAL_PATH or not _is_safe_keyword(keyword):
         return []
     executable = shutil.which("rg")
     if executable is None:
         return []
+    # 复用源码扫描的白名单校验，并固定 rg 参数，调用方无法注入额外命令参数。
     root = validate_local_source_root(Path(artifact.storage_location), settings)
     command = [
         executable,
@@ -45,6 +47,7 @@ def search_with_ripgrep(artifact: SourceArtifact | None, keyword: str, settings:
         completed = subprocess.run(command, capture_output=True, check=False, text=True, timeout=5)
     except (OSError, subprocess.TimeoutExpired):
         return []
+    # rg 的 1 表示“无匹配”，不是执行错误。
     if completed.returncode not in {0, 1}:
         return []
     return _parse_ripgrep_matches(completed.stdout, root)
@@ -75,6 +78,7 @@ def _parse_ripgrep_matches(output: str, root: Path) -> list[KeywordSearchHit]:
             path = Path(path_value).resolve(strict=True)
         except OSError:
             continue
+        # 即使 rg 返回异常路径，也必须再次验证其仍位于登记根目录内。
         if not path.is_relative_to(root):
             continue
         hits.append(

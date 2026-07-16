@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     default_request_timeout_seconds: int = 20
     max_response_body_bytes: int = 1_048_576
+    execution_max_concurrency: int = 5
     source_root_allowlist: str = ""
     source_upload_root: Path = Path("data/source-uploads")
     max_source_archive_bytes: int = 524_288_000
@@ -37,6 +38,7 @@ class Settings(BaseSettings):
     knowledge_context_max_results: int = 20
     knowledge_context_max_characters: int = 12_000
     knowledge_vector_candidate_count: int = 20
+    agent_llm_timeout_seconds: int = 60
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -65,6 +67,15 @@ class Settings(BaseSettings):
 
         if value != 1536:
             raise ValueError("EMBEDDING_DIMENSIONS 当前必须为 1536")
+        return value
+
+    @field_validator("execution_max_concurrency")
+    @classmethod
+    def validate_execution_max_concurrency(cls, value: int) -> int:
+        """限制单进程 Runner 的最大并发连接数。"""
+
+        if value < 1 or value > 20:
+            raise ValueError("EXECUTION_MAX_CONCURRENCY 必须在 1 到 20 之间")
         return value
 
     @model_validator(mode="after")

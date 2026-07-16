@@ -26,6 +26,7 @@ async def get_api_knowledge_context(
     query: Annotated[str | None, Query(max_length=500)] = None,
     max_results: Annotated[int | None, Query(ge=1, le=50)] = None,
 ) -> object:
+    # AccessibleProject 已在依赖层完成项目成员校验，Service 仅处理检索语义。
     context = await retrieve_hybrid_context(
         session,
         project.id,
@@ -48,6 +49,7 @@ async def retry_knowledge_embeddings(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> object:
+    # 重试任务仍使用当前用户身份记录 requested_by，方便后续追溯。
     task_id = await retry_embeddings(session, project.id, scan_id, current_user.id)
     return success_response(
         data=EmbeddingRetryResponse(task_id=task_id, source_scan_id=scan_id).model_dump(mode="json"),

@@ -9,6 +9,7 @@ from app.database import async_session_factory
 from app.modules.knowledge.chunker import build_knowledge_chunks
 from app.modules.knowledge.embedding import create_embedding_task, process_embedding_task
 from app.modules.knowledge.repository import KnowledgeRepository
+from app.modules.executions.service import process_execution_task
 from app.modules.projects.repository import ProjectRepository
 from app.modules.source_scans.java_parser import JavaParseError, parse_java_sources
 from app.modules.source_scans.models import (
@@ -58,7 +59,7 @@ class TaskWorker:
                 task = await SourceScanRepository(session).claim_next_task()
                 if task is None:
                     return False
-                if task.task_type == TaskType.KNOWLEDGE_EMBEDDING:
+                if task.task_type in {TaskType.KNOWLEDGE_EMBEDDING, TaskType.EXECUTION}:
                     task.started_at = func.now()
                 else:
                     scan = await SourceScanRepository(session).get_scan_by_task_id(task.id)
@@ -69,6 +70,9 @@ class TaskWorker:
                     scan.started_at = func.now()
 
             try:
+                if task.task_type == TaskType.EXECUTION:
+                    await process_execution_task(session, task)
+                    return True
                 if task.task_type == TaskType.KNOWLEDGE_EMBEDDING:
                     await process_embedding_task(session, task)
                     return True

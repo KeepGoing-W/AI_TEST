@@ -28,6 +28,7 @@ async def retrieve_hybrid_context(
 ) -> KnowledgeContextResponse:
     """合并精确和语义结果，按引用重排并在返回前裁剪上下文预算。"""
 
+    # 精确结果始终优先；Embedding 不可用时仍可提供可追溯的源码上下文。
     exact = await retrieve_exact_context(session, project_id, source_scan_id, api_definition_id)
     if exact is None:
         raise AppError("API_DEFINITION_NOT_FOUND", "接口定义不存在", 404)
@@ -36,6 +37,7 @@ async def retrieve_hybrid_context(
         raise AppError("SOURCE_SCAN_NOT_FOUND", "扫描任务不存在", 404)
     settings = get_settings()
     limit = min(max_results or settings.knowledge_context_max_results, settings.knowledge_context_max_results)
+    # 三张映射表以 chunk_id 为中心完成合并，避免同一切块被精确和向量结果重复返回。
     sources_by_chunk_id: dict[UUID, set[str]] = defaultdict(set)
     scores_by_chunk_id: dict[UUID, float] = {}
     chunks_by_id: dict[UUID, KnowledgeChunk] = {}
@@ -48,6 +50,7 @@ async def retrieve_hybrid_context(
         scores_by_chunk_id,
         sources_by_chunk_id,
     )
+    # 响应只携带源码引用和受预算约束的内容，不暴露与扫描版本无关的磁盘路径。
     source_files = {value.id: value for value in await KnowledgeRepository(session).list_source_files(source_scan_id)}
     symbols = {value.id: value for value in await KnowledgeRepository(session).list_symbols(source_scan_id)}
     ranked_chunks = sorted(
@@ -92,6 +95,7 @@ def _add_exact_chunks(
     for chunk in exact.chunks:
         chunks_by_id[chunk.id] = chunk
         sources_by_chunk_id[chunk.id].add("exact")
+        # 方法体最贴近选中的接口，Controller 次之，关系扩展结果作为补充。
         if chunk.code_symbol_id == method_id:
             scores_by_chunk_id[chunk.id] = 1.0
         elif chunk.code_symbol_id == controller_id:
@@ -108,6 +112,7 @@ async def _add_vector_chunks(
     scores_by_chunk_id: dict[UUID, float],
     sources_by_chunk_id: dict[UUID, set[str]],
 ) -> bool:
+    # 语义召回是可选增强；缺少 Provider 或调用失败均不影响精确检索。
     provider = await get_default_embedding_provider(session)
     if provider is None:
         return False
@@ -123,6 +128,7 @@ async def _add_vector_chunks(
     for chunk, distance in candidates:
         chunks_by_id[chunk.id] = chunk
         sources_by_chunk_id[chunk.id].add("vector")
+        # 向量距离转为分数后降低权重，不能超过同一切块已有的精确检索分数。
         scores_by_chunk_id[chunk.id] = max(scores_by_chunk_id.get(chunk.id, 0.0), max(0.0, 1.0 - distance) * 0.8)
     return True
 
@@ -144,6 +150,7 @@ def _apply_context_budget(
     limit: int,
     character_budget: int,
 ) -> list[KnowledgeContextChunkResponse]:
+    # 预算按排序顺序消耗，确保最相关的上下文先进入 Agent 输入。
     remaining = character_budget
     values: list[KnowledgeContextChunkResponse] = []
     for chunk in chunks:
@@ -152,6 +159,7 @@ def _apply_context_budget(
         content = chunk.content
         original_characters = len(content)
         truncated = original_characters > remaining
+        # 这里的截断只发生在最终响应，不改变数据库中的语义切块边界。
         content = content[:remaining] if truncated else content
         if not content:
             break

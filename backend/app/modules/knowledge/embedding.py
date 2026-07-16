@@ -54,6 +54,7 @@ class OpenAiCompatibleEmbeddingProvider:
         if not texts:
             return []
         try:
+            # 密钥只在调用 Provider 前短暂解密，不写入任务结果或异常信息。
             api_key = Fernet(get_settings().encryption_key.get_secret_value()).decrypt(
                 self.config.encrypted_api_key.encode()
             ).decode()
@@ -70,9 +71,11 @@ class OpenAiCompatibleEmbeddingProvider:
                     },
                 )
                 response.raise_for_status()
+                # 先用 Pydantic 约束第三方响应结构，避免异常数据写入 pgvector。
                 payload = EmbeddingResponse.model_validate(response.json())
         except (httpx.HTTPError, ValidationError) as exc:
             raise EmbeddingError("EMBEDDING_PROVIDER_FAILED", "Embedding Provider 调用失败") from exc
+        # API 返回顺序不作为契约，必须依据 index 恢复与输入 texts 一一对应的顺序。
         ordered = sorted(payload.data, key=lambda item: item.index)
         if len(ordered) != len(texts) or [item.index for item in ordered] != list(range(len(texts))):
             raise EmbeddingError("EMBEDDING_RESPONSE_INVALID", "Embedding Provider 返回数量或顺序无效")
@@ -100,6 +103,7 @@ async def create_embedding_task(
 async def get_default_embedding_provider(session: AsyncSession) -> EmbeddingProvider | None:
     """返回默认启用的 Embedding Provider，不暴露其密钥。"""
 
+    # 当前复用默认且启用的 LLM 配置，仅在配置存在时才尝试语义召回。
     config = await session.scalar(
         select(LlmConfig).where(LlmConfig.is_default.is_(True), LlmConfig.enabled.is_(True))
     )
@@ -115,6 +119,7 @@ async def process_embedding_task(session: AsyncSession, task: BackgroundTask) ->
         task.status = TaskStatus.RUNNING
         task.result = {"phase": "embedding", "processed": 0}
     processed = 0
+    # 每次锁定一个批次后立即提交“处理中”状态，避免多个 Worker 重复生成同一切块。
     while True:
         async with session.begin():
             chunks = await KnowledgeRepository(session).claim_embedding_chunks(
@@ -142,11 +147,13 @@ async def process_embedding_task(session: AsyncSession, task: BackgroundTask) ->
             )
             return
         try:
+            # 网络调用放在数据库事务之外，避免长时间占用行锁。
             vectors = await OpenAiCompatibleEmbeddingProvider(config).embed([chunk.content for chunk in chunks])
         except EmbeddingError as exc:
             await _mark_embedding_failed(session, task, chunks, exc.code, exc.message)
             return
         async with session.begin():
+            # 只有整批向量均返回有效结果时才把切块标记为成功。
             for chunk, vector in zip(chunks, vectors, strict=True):
                 chunk.embedding = vector
                 chunk.embedding_status = EmbeddingStatus.SUCCEEDED
@@ -163,6 +170,7 @@ async def _mark_embedding_failed(
     error_message: str,
 ) -> None:
     async with session.begin():
+        # 保留失败状态与错误码，由新的任务在尝试次数未耗尽时重新领取。
         for chunk in chunks:
             chunk.embedding_status = EmbeddingStatus.FAILED
             chunk.embedding_error = error_code

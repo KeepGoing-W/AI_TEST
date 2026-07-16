@@ -30,6 +30,7 @@ def build_knowledge_chunks(
 ) -> list[KnowledgeChunk]:
     """按类、方法、DTO、异常和 SQL 定义生成源码切块，绝不按固定字符数拆分。"""
 
+    # 以扫描时保存的源码快照为准，避免后续磁盘文件变化影响同一扫描版本的检索结果。
     files_by_id = {source_file.id: source_file for source_file in source_files}
     chunks: list[SourceChunk] = []
     for symbol in symbols:
@@ -39,6 +40,7 @@ def build_knowledge_chunks(
         chunk_type = _symbol_chunk_type(symbol)
         if chunk_type is None:
             continue
+        # 符号的行号由 Tree-sitter 扫描阶段给出，因此一个切块始终对应完整的语义单元。
         content = _line_range(source_file.content, symbol.start_line, symbol.end_line)
         if not content:
             continue
@@ -53,6 +55,7 @@ def build_knowledge_chunks(
                 metadata={"qualifiedName": symbol.qualified_name, "symbolType": symbol.symbol_type.value},
             )
         )
+    # SQL 注解没有独立的 CodeSymbol，单独补齐后才能被向量检索召回。
     for source_file in source_files:
         chunks.extend(_sql_chunks(source_file))
     return [
@@ -97,6 +100,7 @@ def _line_range(content: str, start_line: int, end_line: int) -> str:
 def _sql_chunks(source_file: SourceFile) -> list[SourceChunk]:
     chunks: list[SourceChunk] = []
     for match in SQL_ANNOTATION_PATTERN.finditer(source_file.content):
+        # 不能用正则直接匹配到右括号：SQL 文本和方法调用都可能包含嵌套括号。
         end = _annotation_end(source_file.content, match.end() - 1)
         if end is None:
             continue
@@ -123,6 +127,7 @@ def _annotation_end(content: str, opening_parenthesis: int) -> int | None:
     depth = 0
     in_string = False
     escaped = False
+    # 只跟踪括号与字符串边界，找到与注解左括号配对的右括号即结束。
     for index in range(opening_parenthesis, len(content)):
         character = content[index]
         if in_string:

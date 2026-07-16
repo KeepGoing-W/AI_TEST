@@ -58,13 +58,16 @@ class KnowledgeChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     content_sha256: Mapped[str] = mapped_column(Text, nullable=False)
     start_line: Mapped[int] = mapped_column(Integer, nullable=False)
     end_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Python 使用 metadata_ 避免与 SQLAlchemy Declarative 的 metadata 属性冲突。
     metadata_: Mapped[dict[str, object]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    # 维度与迁移中的 vector(1536) 保持一致，写入前由 Embedding Provider 校验。
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
     embedding_status: Mapped[EmbeddingStatus] = mapped_column(
         Enum(EmbeddingStatus, name="embedding_status", native_enum=True),
         nullable=False,
         default=EmbeddingStatus.PENDING,
     )
+    # 尝试次数用于限制重复失败时的自动或人工重试边界。
     embedding_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     embedding_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 

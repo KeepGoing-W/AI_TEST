@@ -27,6 +27,7 @@ class KnowledgeRepository:
     async def claim_embedding_chunks(
         self, source_scan_id: UUID, batch_size: int, max_attempts: int
     ) -> list[KnowledgeChunk]:
+        # skip_locked 让并发 Worker 跳过已被其他任务领取的切块。
         statement = (
             select(KnowledgeChunk)
             .where(
@@ -40,6 +41,7 @@ class KnowledgeRepository:
         )
         values = list(await self.session.scalars(statement))
         for value in values:
+            # 领取即增加次数，进程中断后不会无限重试同一失败切块。
             value.embedding_status = EmbeddingStatus.PROCESSING
             value.embedding_attempts += 1
             value.embedding_error = None
@@ -72,6 +74,7 @@ class KnowledgeRepository:
     async def search_by_embedding(
         self, source_scan_id: UUID, embedding: list[float], limit: int
     ) -> list[tuple[KnowledgeChunk, float]]:
+        # pgvector 的余弦距离越小越相似，排序后由混合层统一换算为展示分数。
         distance = KnowledgeChunk.embedding.cosine_distance(embedding).label("distance")
         statement = (
             select(KnowledgeChunk, distance)
@@ -85,6 +88,7 @@ class KnowledgeRepository:
         return [(chunk, float(value)) for chunk, value in (await self.session.execute(statement)).all()]
 
     async def has_active_embedding_task(self, project_id: UUID, source_scan_id: UUID) -> bool:
+        # 重试前检查同一扫描版本是否已有待处理任务，避免重复提交到后台队列。
         statement = select(func.count()).select_from(BackgroundTask).where(
             BackgroundTask.project_id == project_id,
             BackgroundTask.task_type == TaskType.KNOWLEDGE_EMBEDDING,

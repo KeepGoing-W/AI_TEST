@@ -14,6 +14,7 @@ class TaskType(str, enum.Enum):
 
     SOURCE_SCAN = "source_scan"
     KNOWLEDGE_EMBEDDING = "knowledge_embedding"
+    EXECUTION = "execution"
 
 
 class TaskStatus(str, enum.Enum):
