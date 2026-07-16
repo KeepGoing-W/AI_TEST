@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     max_response_body_bytes: int = 1_048_576
     execution_max_concurrency: int = 5
     source_root_allowlist: str = ""
+    openapi_host_allowlist: str = ""
     source_upload_root: Path = Path("data/source-uploads")
     max_source_archive_bytes: int = 524_288_000
     max_source_file_bytes: int = 1_048_576

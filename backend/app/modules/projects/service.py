@@ -6,6 +6,7 @@ from zipfile import BadZipFile, ZipFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.errors import AppError
+from app.common.network import NetworkTargetError, approve_http_target, validate_host_allowlist
 from app.config import get_settings
 from app.modules.projects.models import OpenApiSourceType, Project, ProjectMember, SourceArtifact, SourceType
 from app.modules.projects.repository import ProjectRepository
@@ -74,9 +75,12 @@ async def remove_project_member(session: AsyncSession, project_id: UUID, user_id
 def validate_local_source_path(path: str) -> str:
     """校验目录位于配置的受控根目录。"""
 
-    candidate = Path(path).resolve(strict=True)
-    settings = get_settings()
-    roots = [Path(item.strip()).resolve(strict=True) for item in settings.source_root_allowlist.split(",") if item.strip()]
+    try:
+        candidate = Path(path).resolve(strict=True)
+        settings = get_settings()
+        roots = [Path(item.strip()).resolve(strict=True) for item in settings.source_root_allowlist.split(",") if item.strip()]
+    except OSError as exc:
+        raise AppError("SOURCE_PATH_NOT_ALLOWED", "源码目录不在允许范围内", 400) from exc
     if not candidate.is_dir() or not any(candidate.is_relative_to(root) for root in roots):
         raise AppError("SOURCE_PATH_NOT_ALLOWED", "源码目录不在允许范围内", 400)
     return str(candidate)
@@ -103,10 +107,17 @@ async def configure_zip_source(session: AsyncSession, project_id: UUID, content:
     destination.write_bytes(content)
     try:
         with ZipFile(destination) as archive:
-            if any(Path(item.filename).is_absolute() or ".." in Path(item.filename).parts for item in archive.infolist()):
+            if any(
+                Path(item.filename).is_absolute()
+                or ".." in Path(item.filename.replace("\\", "/")).parts
+                or _is_zip_symlink(item.external_attr)
+                for item in archive.infolist()
+            ):
                 raise AppError("SOURCE_ARCHIVE_INVALID", "源码压缩包包含非法路径", 400)
-    except BadZipFile as exc:
+    except (AppError, BadZipFile) as exc:
         destination.unlink(missing_ok=True)
+        if isinstance(exc, AppError):
+            raise
         raise AppError("SOURCE_ARCHIVE_INVALID", "源码压缩包格式无效", 400) from exc
     artifact = SourceArtifact(project_id=project_id, source_type=SourceType.ZIP_UPLOAD, storage_location=str(destination), original_name=filename, size_bytes=len(content), created_by=user_id)
     await ProjectRepository(session).replace_source_artifact(artifact)
@@ -116,14 +127,23 @@ async def configure_zip_source(session: AsyncSession, project_id: UUID, content:
 
 
 async def configure_openapi_url(session: AsyncSession, project: Project, url: str) -> Project:
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise AppError("OPENAPI_URL_INVALID", "OpenAPI 地址无效", 400)
+    try:
+        allowlist = validate_host_allowlist(
+            [item for item in get_settings().openapi_host_allowlist.split(",") if item.strip()]
+        )
+        await approve_http_target(url, allowlist)
+    except NetworkTargetError as exc:
+        code = "OPENAPI_HOST_NOT_ALLOWED" if exc.reason == "host_not_allowed" else "OPENAPI_URL_INVALID"
+        raise AppError(code, "OpenAPI 地址不在受控范围内" if code.endswith("NOT_ALLOWED") else "OpenAPI 地址无效", 400) from exc
     project.openapi_source_type = OpenApiSourceType.URL
     project.openapi_location = url
     await session.commit()
     await session.refresh(project)
     return project
+
+
+def _is_zip_symlink(external_attr: int) -> bool:
+    return (external_attr >> 16) & 0o170000 == 0o120000
 
 
 async def configure_openapi_file(session: AsyncSession, project: Project, content: bytes, filename: str) -> Project:

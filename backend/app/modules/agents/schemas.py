@@ -159,6 +159,7 @@ class TestCaseResponse(BaseModel):
     category: TestCaseCategory
     priority: str
     status: TestCaseStatus
+    version: int
     preconditions: list[str]
     request_template: dict[str, object]
     source_rule_ids: list[UUID]

@@ -121,6 +121,12 @@ def _json_path_values(value: object | None, path: str) -> list[object]:
     return current
 
 
+def extract_json_path_values(value: object | None, path: str) -> list[object]:
+    """复用与断言一致的受限 JSONPath 语法，不允许流程配置执行过滤表达式。"""
+
+    return _json_path_values(value, path)
+
+
 def _json_type(value: object) -> str:
     if value is None:
         return "null"

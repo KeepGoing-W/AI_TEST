@@ -44,6 +44,7 @@ class TestCase(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[TestCaseStatus] = mapped_column(
         Enum(TestCaseStatus, name="test_case_status", native_enum=True), nullable=False, default=TestCaseStatus.DRAFT
     )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     preconditions: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     request_template: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     source_rule_ids: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)

@@ -44,6 +44,18 @@ def resolve_template(value: JsonValue, namespaces: dict[str, dict[str, object]])
     return _VARIABLE_PATTERN.sub(replace, value)
 
 
+def find_runtime_variables(value: object) -> set[str]:
+    """递归找出流程请求会消费的运行变量，供保存流程时校验生产顺序。"""
+
+    if isinstance(value, dict):
+        return set().union(*(find_runtime_variables(item) for item in value.values())) if value else set()
+    if isinstance(value, list):
+        return set().union(*(find_runtime_variables(item) for item in value)) if value else set()
+    if not isinstance(value, str):
+        return set()
+    return {match.group(2) for match in _VARIABLE_PATTERN.finditer(value) if match.group(1) == "runtime"}
+
+
 def build_request(
     method: str,
     normalized_path: str,
@@ -67,9 +79,33 @@ def build_request(
     path = _PATH_PARAMETER_PATTERN.sub(lambda match: _replace_path_parameter(match, path_values), normalized_path)
     if _PATH_PARAMETER_PATTERN.search(path) is not None:
         raise AppError("REQUEST_PATH_VARIABLE_MISSING", "路径变量缺失", 400)
+    try:
+        parsed_base = urlparse(base_url)
+        base_hostname = parsed_base.hostname
+        base_port = parsed_base.port
+    except ValueError as exc:
+        raise AppError("REQUEST_TARGET_INVALID", "请求目标无效", 400) from exc
+    if (
+        parsed_base.scheme not in {"http", "https"}
+        or base_hostname is None
+        or parsed_base.username is not None
+        or parsed_base.password is not None
+    ):
+        raise AppError("REQUEST_TARGET_INVALID", "请求目标无效", 400)
     url = urljoin(_ensure_trailing_slash(base_url), path.lstrip("/"))
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise AppError("REQUEST_TARGET_INVALID", "请求目标无效", 400) from exc
+    if (
+        parsed.scheme != parsed_base.scheme
+        or hostname != base_hostname
+        or port != base_port
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
         raise AppError("REQUEST_TARGET_INVALID", "请求目标无效", 400)
     _apply_auth(headers, query, resolved.get("auth"))
     body = resolved.get("body")

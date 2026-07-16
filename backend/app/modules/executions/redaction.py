@@ -7,9 +7,11 @@ from urllib.parse import urlencode
 
 from app.modules.executions.variables import BuiltRequest
 
-_SENSITIVE_KEYWORDS = ("authorization", "token", "cookie", "password", "secret", "api-key", "apikey")
+_SENSITIVE_KEYWORDS = (
+    "authorization", "token", "cookie", "password", "passwd", "secret", "api-key", "apikey", "credential", "session",
+)
 _SENSITIVE_TEXT_PATTERN = re.compile(
-    r"(?i)((?:authorization|token|cookie|password|secret|api[_-]?key)\s*[:=]\s*[\"']?)[^\s\",'&}]+"
+    r"(?i)((?:authorization|token|cookie|password|passwd|secret|api[_-]?key|credential|session)\s*[:=]\s*[\"']?)[^\s\",'&}]+"
 )
 
 

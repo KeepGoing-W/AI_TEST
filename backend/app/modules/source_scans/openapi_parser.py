@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 import yaml
 
+from app.common.network import NetworkTargetError, approve_http_target, validate_stable_dns
 from app.config import Settings
 from app.modules.projects.models import OpenApiSourceType
 
@@ -53,6 +54,9 @@ async def load_openapi_operations(
 
 async def _read_url(location: str, settings: Settings) -> bytes:
     try:
+        allowlist = [item for item in settings.openapi_host_allowlist.split(",") if item.strip()]
+        target = await approve_http_target(location, allowlist)
+        await validate_stable_dns(target)
         async with httpx.AsyncClient(
             follow_redirects=False,
             timeout=settings.default_request_timeout_seconds,
@@ -66,7 +70,7 @@ async def _read_url(location: str, settings: Settings) -> bytes:
                     if size > settings.max_openapi_document_bytes:
                         raise OpenApiParseError("OPENAPI_DOCUMENT_TOO_LARGE", "OpenAPI 文档超过大小限制")
                     chunks.append(chunk)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, NetworkTargetError) as exc:
         raise OpenApiParseError("OPENAPI_URL_UNAVAILABLE", "OpenAPI 地址不可访问") from exc
     return b"".join(chunks)
 

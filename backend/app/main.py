@@ -21,8 +21,10 @@ from app.modules.executions.router import router as executions_router
 from app.modules.llm_configs.router import router as llm_configs_router
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.projects.router import router as projects_router
+from app.modules.reports.router import router as reports_router
 from app.modules.source_scans.router import router as source_scans_router
 from app.modules.testcases.router import router as testcases_router
+from app.modules.test_suites.router import router as test_suites_router
 from app.modules.users.router import router as users_router
 from app.modules.users.service import initialize_admin_user
 from app.workers.task_worker import TaskWorker
@@ -56,8 +58,10 @@ app.include_router(executions_router, prefix=settings.api_v1_prefix)
 app.include_router(llm_configs_router, prefix=settings.api_v1_prefix)
 app.include_router(knowledge_router, prefix=settings.api_v1_prefix)
 app.include_router(projects_router, prefix=settings.api_v1_prefix)
+app.include_router(reports_router, prefix=settings.api_v1_prefix)
 app.include_router(source_scans_router, prefix=settings.api_v1_prefix)
 app.include_router(testcases_router, prefix=settings.api_v1_prefix)
+app.include_router(test_suites_router, prefix=settings.api_v1_prefix)
 app.include_router(users_router, prefix=settings.api_v1_prefix)
 
 

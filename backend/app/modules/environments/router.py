@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.errors import AppError
+from app.common.network import NetworkTargetError, is_host_allowed, validate_host_allowlist
 from app.common.responses import success_response
 from app.config import get_settings
 from app.database import get_db_session
@@ -35,8 +36,20 @@ class VariableRequest(BaseModel):
 
 
 def validate_environment(payload: EnvironmentRequest) -> None:
-    if urlparse(payload.base_url).scheme not in {"http", "https"}:
+    try:
+        parsed = urlparse(payload.base_url)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise AppError("ENVIRONMENT_BASE_URL_INVALID", "Base URL 无效", 400) from exc
+    if parsed.scheme not in {"http", "https"} or hostname is None or parsed.username is not None or parsed.password is not None:
         raise AppError("ENVIRONMENT_BASE_URL_INVALID", "Base URL 无效", 400)
+    try:
+        allowlist = validate_host_allowlist(payload.host_allowlist)
+    except NetworkTargetError as exc:
+        raise AppError("ENVIRONMENT_HOST_ALLOWLIST_INVALID", "Host 白名单无效", 400) from exc
+    if not allowlist or not is_host_allowed(hostname, allowlist):
+        raise AppError("ENVIRONMENT_BASE_URL_NOT_ALLOWED", "Base URL Host 必须在白名单中", 400)
     if payload.environment_type == EnvironmentType.PRODUCTION and payload.allow_write_requests:
         raise AppError("ENVIRONMENT_PRODUCTION_READONLY", "生产环境禁止写请求", 400)
 

@@ -43,6 +43,11 @@ class ExecutionStepResponse(BaseModel):
     method: str | None
     target_url: str | None
     request_snapshot: dict[str, object]
+    case_snapshot: dict[str, object]
+    traceability_snapshot: dict[str, object]
+    request_override: dict[str, object]
+    variable_extractions: list[object]
+    extracted_variables: dict[str, object]
     response_snapshot: dict[str, object]
     redacted_curl: str | None
     duration_ms: int | None
@@ -58,6 +63,7 @@ class ExecutionStepResponse(BaseModel):
 class ExecutionRunResponse(BaseModel):
     id: UUID
     project_id: UUID
+    test_suite_id: UUID | None
     environment_id: UUID
     background_task_id: UUID
     status: ExecutionRunStatus

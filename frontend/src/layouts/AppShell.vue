@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { Bot, ClipboardCheck, FolderKanban, LogOut, PlayCircle, ScanSearch, TestTube2 } from "lucide-vue-next";
+import { Bot, ClipboardCheck, FolderKanban, GitBranch, LogOut, PlayCircle, ScanSearch, TestTube2 } from "lucide-vue-next";
 import { NButton, NDropdown } from "naive-ui";
 
 import { useAuthStore } from "@/stores/auth";
@@ -52,6 +52,11 @@ function handleUserAction(key: string): void {
           <span class="navigation-rail" aria-hidden="true"></span>
           <PlayCircle :size="20" aria-hidden="true" />
           <span class="navigation-label">测试执行</span>
+        </RouterLink>
+        <RouterLink class="navigation-item" :to="{ name: 'test-suites' }">
+          <span class="navigation-rail" aria-hidden="true"></span>
+          <GitBranch :size="20" aria-hidden="true" />
+          <span class="navigation-label">流程与报告</span>
         </RouterLink>
       </nav>
       <div class="sidebar-footer">

@@ -7,6 +7,7 @@ import ApiDefinitionView from "@/views/api-definitions/ApiDefinitionView.vue";
 import AnalysisView from "@/views/analysis/AnalysisView.vue";
 import TestCaseView from "@/views/testcases/TestCaseView.vue";
 import ExecutionView from "@/views/executions/ExecutionView.vue";
+import TestSuiteReportView from "@/views/test-suites/TestSuiteReportView.vue";
 import { useAuthStore } from "@/stores/auth";
 
 const router = createRouter({
@@ -23,7 +24,8 @@ const router = createRouter({
         { path: "api-definitions", name: "api-definitions", component: ApiDefinitionView },
         { path: "analysis", name: "analysis", component: AnalysisView },
         { path: "testcases", name: "testcases", component: TestCaseView },
-        { path: "executions", name: "executions", component: ExecutionView }
+        { path: "executions", name: "executions", component: ExecutionView },
+        { path: "test-suites", name: "test-suites", component: TestSuiteReportView }
       ]
     }
   ]

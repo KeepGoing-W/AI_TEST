@@ -66,6 +66,7 @@ async def update_test_case(
                 for position, assertion in enumerate(payload.assertions, start=1)
             ]
         )
+    test_case.version += 1
     await session.commit()
     await session.refresh(test_case)
     assertions = await AgentRepository(session).list_assertions([test_case.id])
@@ -110,6 +111,7 @@ def _serialize_cases(
                 category=case.category,
                 priority=case.priority,
                 status=case.status,
+                version=case.version,
                 preconditions=[str(value) for value in case.preconditions],
                 request_template=case.request_template,
                 source_rule_ids=[UUID(str(value)) for value in case.source_rule_ids],

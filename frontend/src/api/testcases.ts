@@ -25,6 +25,7 @@ export interface TestCase {
   category: TestCaseCategory;
   priority: string;
   status: TestCaseStatus;
+  version: number;
   preconditions: string[];
   request_template: Record<string, unknown>;
   source_rule_ids: string[];

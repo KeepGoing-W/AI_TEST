@@ -42,6 +42,8 @@ class ExecutionErrorCategory(str, enum.Enum):
     TIMEOUT = "timeout"
     RESPONSE_TOO_LARGE = "response_too_large"
     ASSERTION = "assertion"
+    PRECONDITION = "precondition"
+    VARIABLE_EXTRACTION = "variable_extraction"
     INTERNAL = "internal"
 
 
@@ -51,6 +53,7 @@ class ExecutionRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "execution_runs"
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    test_suite_id: Mapped[UUID | None] = mapped_column(ForeignKey("test_suites.id", ondelete="SET NULL"), nullable=True)
     environment_id: Mapped[UUID] = mapped_column(ForeignKey("test_environments.id", ondelete="RESTRICT"), nullable=False)
     background_task_id: Mapped[UUID] = mapped_column(
         ForeignKey("background_tasks.id", ondelete="CASCADE"), nullable=False, unique=True
@@ -80,6 +83,7 @@ class ExecutionStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     execution_run_id: Mapped[UUID] = mapped_column(ForeignKey("execution_runs.id", ondelete="CASCADE"), nullable=False)
     test_case_id: Mapped[UUID] = mapped_column(ForeignKey("test_cases.id", ondelete="RESTRICT"), nullable=False)
+    test_suite_step_id: Mapped[UUID | None] = mapped_column(ForeignKey("test_suite_steps.id", ondelete="SET NULL"), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[ExecutionStepStatus] = mapped_column(
         Enum(ExecutionStepStatus, name="execution_step_status", native_enum=True),
@@ -89,6 +93,11 @@ class ExecutionStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     method: Mapped[str | None] = mapped_column(String(10), nullable=True)
     target_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    case_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    traceability_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    request_override: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    variable_extractions: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
+    extracted_variables: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     response_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     redacted_curl: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

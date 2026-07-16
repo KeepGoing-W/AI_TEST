@@ -14,6 +14,7 @@ from app.common.errors import AppError
 from app.config import get_settings
 from app.modules.environments.models import EnvironmentVariable, TestEnvironment
 from app.modules.executions.assertion_engine import evaluate_assertion, parse_response_json
+from app.modules.executions.extractions import extract_runtime_value
 from app.modules.executions.models import (
     AssertionResult,
     ExecutionErrorCategory,
@@ -32,8 +33,12 @@ from app.modules.executions.schemas import (
     ExecutionStepResponse,
 )
 from app.modules.executions.variables import BuiltRequest, build_request
-from app.modules.source_scans.models import BackgroundTask, TaskStatus, TaskType
+from app.modules.agents.models import AgentRun
+from app.modules.knowledge.models import BusinessRule
+from app.modules.source_scans.models import ApiDefinition, BackgroundTask, CodeSymbol, SourceFile, SourceScan, TaskStatus, TaskType
 from app.modules.testcases.models import TestCase, TestCaseStatus
+from app.modules.test_suites.models import TestSuite, VariableExtractionSource
+from app.modules.test_suites.repository import TestSuiteRepository
 from app.modules.users.models import User
 
 
@@ -57,7 +62,7 @@ async def create_execution_run(
     ordered_cases = [cases_by_id[case_id] for case_id in payload.test_case_ids]
     apis = await repository.get_api_definitions([test_case.api_definition_id for test_case in ordered_cases])
     apis_by_id = {api.id: api for api in apis}
-    if len(apis_by_id) != len(ordered_cases):
+    if len(apis_by_id) != len({test_case.api_definition_id for test_case in ordered_cases}):
         raise AppError("API_DEFINITION_NOT_FOUND", "测试用例关联接口不存在", 409)
     namespaces = await load_variable_namespaces(session, environment, {})
     write_required = False
@@ -87,13 +92,88 @@ async def create_execution_run(
     )
     session.add(run)
     await session.flush()
+    snapshots = await _build_traceability_snapshots(session, repository, run.id, ordered_cases, apis_by_id)
     session.add_all(
         [
-            ExecutionStep(execution_run_id=run.id, test_case_id=test_case.id, position=position)
+            ExecutionStep(
+                execution_run_id=run.id,
+                test_case_id=test_case.id,
+                position=position,
+                case_snapshot=snapshots[test_case.id][0],
+                traceability_snapshot=snapshots[test_case.id][1],
+            )
             for position, test_case in enumerate(ordered_cases, start=1)
         ]
     )
     task.payload = {"executionRunId": str(run.id), "writeConfirmed": payload.write_confirmed, "confirmedHost": payload.confirmed_host}
+    await session.commit()
+    await session.refresh(run)
+    return run
+
+
+async def create_suite_execution_run(
+    session: AsyncSession,
+    project_id: UUID,
+    current_user: User,
+    suite: TestSuite,
+    environment_id: UUID,
+    write_confirmed: bool,
+    confirmed_host: str | None,
+) -> ExecutionRun:
+    """把流程定义复制为不可变执行步骤，运行中不再读取可变的流程配置。"""
+
+    repository = ExecutionRepository(session)
+    environment = await session.get(TestEnvironment, environment_id)
+    if environment is None or environment.project_id != project_id:
+        raise AppError("ENVIRONMENT_NOT_FOUND", "测试环境不存在", 404)
+    suite_repository = TestSuiteRepository(session)
+    suite_steps = await suite_repository.list_steps(suite.id)
+    test_cases = await repository.get_test_cases(project_id, [step.test_case_id for step in suite_steps])
+    if len(test_cases) != len({step.test_case_id for step in suite_steps}) or any(case.status != TestCaseStatus.APPROVED for case in test_cases):
+        raise AppError("TEST_CASE_NOT_APPROVED", "流程引用的用例不存在或未审核", 409)
+    cases_by_id = {case.id: case for case in test_cases}
+    api_definitions = await repository.get_api_definitions([case.api_definition_id for case in test_cases])
+    apis_by_id = {api.id: api for api in api_definitions}
+    if len(apis_by_id) != len({test_case.api_definition_id for test_case in test_cases}):
+        raise AppError("API_DEFINITION_NOT_FOUND", "测试用例关联接口不存在", 409)
+    extractions_by_step: dict[UUID, list[object]] = defaultdict(list)
+    produced_keys: set[str] = set()
+    for extraction in await suite_repository.list_extractions([step.id for step in suite_steps]):
+        extractions_by_step[extraction.test_suite_step_id].append(
+            {"variableKey": extraction.variable_key, "source": extraction.source.value, "expression": extraction.expression}
+        )
+        produced_keys.add(extraction.variable_key)
+    namespaces = await load_variable_namespaces(session, environment, {key: "__flow_precheck__" for key in produced_keys})
+    write_required = False
+    for suite_step in suite_steps:
+        test_case = cases_by_id[suite_step.test_case_id]
+        api = apis_by_id[test_case.api_definition_id]
+        build_request(api.method, api.normalized_path, environment.base_url, environment.common_headers, _merge_request_template(test_case.request_template, suite_step.request_override), namespaces)
+        write_required = write_required or api.method in {"POST", "PUT", "PATCH", "DELETE"}
+    _validate_write_confirmation(environment, write_required, write_confirmed, confirmed_host)
+    task = BackgroundTask(project_id=project_id, task_type=TaskType.EXECUTION, requested_by=current_user.id)
+    session.add(task)
+    await session.flush()
+    run = ExecutionRun(project_id=project_id, test_suite_id=suite.id, environment_id=environment.id, background_task_id=task.id, requested_by=current_user.id, stop_on_failure=suite.stop_on_failure, total_count=len(suite_steps))
+    session.add(run)
+    await session.flush()
+    snapshots = await _build_traceability_snapshots(session, repository, run.id, test_cases, apis_by_id)
+    session.add_all(
+        [
+            ExecutionStep(
+                execution_run_id=run.id,
+                test_case_id=suite_step.test_case_id,
+                test_suite_step_id=suite_step.id,
+                position=suite_step.position,
+                case_snapshot=snapshots[suite_step.test_case_id][0],
+                traceability_snapshot=snapshots[suite_step.test_case_id][1],
+                request_override=suite_step.request_override,
+                variable_extractions=extractions_by_step[suite_step.id],
+            )
+            for suite_step in suite_steps
+        ]
+    )
+    task.payload = {"executionRunId": str(run.id), "writeConfirmed": write_confirmed, "confirmedHost": confirmed_host}
     await session.commit()
     await session.refresh(run)
     return run
@@ -227,6 +307,7 @@ async def get_execution_response(session: AsyncSession, project_id: UUID, run_id
     return ExecutionRunResponse(
         id=run.id,
         project_id=run.project_id,
+        test_suite_id=run.test_suite_id,
         environment_id=run.environment_id,
         background_task_id=run.background_task_id,
         status=run.status,
@@ -250,6 +331,11 @@ async def get_execution_response(session: AsyncSession, project_id: UUID, run_id
                 method=step.method,
                 target_url=step.target_url,
                 request_snapshot=step.request_snapshot,
+                case_snapshot=step.case_snapshot,
+                traceability_snapshot=step.traceability_snapshot,
+                request_override=step.request_override,
+                variable_extractions=step.variable_extractions,
+                extracted_variables=step.extracted_variables,
                 response_snapshot=step.response_snapshot,
                 redacted_curl=step.redacted_curl,
                 duration_ms=step.duration_ms,
@@ -304,20 +390,20 @@ async def _process_step(
             api.normalized_path,
             environment.base_url,
             environment.common_headers,
-            test_case.request_template,
+            _merge_request_template(test_case.request_template, step.request_override),
             namespaces,
         )
         step.method = request.method
         step.target_url = request.url
         step.request_snapshot = _request_snapshot(request)
         step.redacted_curl = build_redacted_curl(request)
-        await validate_execution_target(
+        target = await validate_execution_target(
             environment,
             request,
             bool(task.payload.get("writeConfirmed", False)),
             _as_string_or_none(task.payload.get("confirmedHost")),
         )
-        response = await send_request(request, get_settings())
+        response = await send_request(request, get_settings(), target)
         step.duration_ms = response.duration_ms
         body_json = parse_response_json(response.body_text)
         step.response_snapshot = {
@@ -351,6 +437,10 @@ async def _process_step(
                 for position, evaluation in enumerate(evaluations, start=1)
             ]
         )
+        extracted = _extract_step_variables(step, body_json, response.body_text, response.headers, response.status_code)
+        # 真实运行变量只保存在该执行记录内；步骤证据仅保存经过字段名脱敏后的副本。
+        run.runtime_variables = run.runtime_variables | extracted
+        step.extracted_variables = redact_value(extracted)
         if all(evaluation.passed for evaluation in evaluations):
             step.status = ExecutionStepStatus.PASSED
             run.passed_count += 1
@@ -363,7 +453,8 @@ async def _process_step(
     except RunnerError as exc:
         await _record_step_error(step, run, exc.category, exc.code, exc.message)
     except AppError as exc:
-        await _record_step_error(step, run, ExecutionErrorCategory.REQUEST_BUILD, exc.code, exc.message)
+        category = ExecutionErrorCategory.VARIABLE_EXTRACTION if exc.code == "VARIABLE_EXTRACTION_FAILED" else ExecutionErrorCategory.PRECONDITION if exc.code == "EXECUTION_VARIABLE_MISSING" else ExecutionErrorCategory.REQUEST_BUILD
+        await _record_step_error(step, run, category, exc.code, exc.message)
     except Exception:
         await _record_step_error(step, run, ExecutionErrorCategory.INTERNAL, "EXECUTION_STEP_FAILED", "执行用例时发生内部错误")
     step.completed_at = datetime.now(UTC)
@@ -431,7 +522,11 @@ def _validate_write_confirmation(
 
 
 def _environment_host(base_url: str) -> str:
-    parsed = urlparse(base_url)
+    try:
+        parsed = urlparse(base_url)
+        _ = parsed.port
+    except ValueError as exc:
+        raise AppError("ENVIRONMENT_BASE_URL_INVALID", "测试环境 Base URL 无效", 400) from exc
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise AppError("ENVIRONMENT_BASE_URL_INVALID", "测试环境 Base URL 无效", 400)
     return f"{parsed.scheme}://{parsed.netloc}"
@@ -458,3 +553,136 @@ def _request_snapshot(request: BuiltRequest) -> dict[str, object]:
 
 def _as_string_or_none(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+async def _build_traceability_snapshots(
+    session: AsyncSession,
+    repository: ExecutionRepository,
+    run_id: UUID,
+    test_cases: list[TestCase],
+    apis_by_id: dict[UUID, ApiDefinition],
+) -> dict[UUID, tuple[dict[str, object], dict[str, object]]]:
+    """在入队时固化用例版本及其 Agent、规则、符号和扫描版本证据。"""
+
+    rule_ids = {UUID(str(rule_id)) for case in test_cases for rule_id in case.source_rule_ids}
+    symbol_ids = {UUID(str(symbol_id)) for case in test_cases for symbol_id in case.source_symbol_ids}
+    scan_ids = {case.source_scan_id for case in test_cases}
+    agent_run_ids = {case.agent_run_id for case in test_cases if case.agent_run_id is not None}
+    rules = {
+        rule.id: rule
+        for rule in await session.scalars(select(BusinessRule).where(BusinessRule.id.in_(rule_ids)))
+    } if rule_ids else {}
+    symbols = {
+        symbol.id: symbol
+        for symbol in await session.scalars(select(CodeSymbol).where(CodeSymbol.id.in_(symbol_ids)))
+    } if symbol_ids else {}
+    source_files = {
+        source_file.id: source_file
+        for source_file in await session.scalars(
+            select(SourceFile).where(SourceFile.id.in_({symbol.source_file_id for symbol in symbols.values()}))
+        )
+    } if symbols else {}
+    scans = {
+        scan.id: scan
+        for scan in await session.scalars(select(SourceScan).where(SourceScan.id.in_(scan_ids)))
+    }
+    agent_runs = {
+        agent_run.id: agent_run
+        for agent_run in await session.scalars(select(AgentRun).where(AgentRun.id.in_(agent_run_ids)))
+    } if agent_run_ids else {}
+    assertions_by_case = {
+        case.id: await repository.get_assertions(case.id)
+        for case in test_cases
+    }
+    snapshots: dict[UUID, tuple[dict[str, object], dict[str, object]]] = {}
+    for case in test_cases:
+        api = apis_by_id[case.api_definition_id]
+        scan = scans.get(case.source_scan_id)
+        agent_run = agent_runs.get(case.agent_run_id) if case.agent_run_id is not None else None
+        case_snapshot = {
+            "id": str(case.id),
+            "version": case.version,
+            "name": case.name,
+            "category": case.category.value,
+            "status": case.status.value,
+            "api": {"id": str(case.api_definition_id), "method": api.method, "path": api.normalized_path},
+            "preconditions": case.preconditions,
+            "requestTemplate": redact_value(case.request_template),
+            "assertions": [
+                {
+                    "position": assertion.position,
+                    "type": assertion.assertion_type,
+                    "config": redact_value(assertion.config),
+                }
+                for assertion in assertions_by_case[case.id]
+            ],
+        }
+        traceability_snapshot = {
+            "executionRunId": str(run_id),
+            "testCase": {"id": str(case.id), "version": case.version},
+            "sourceScan": {"id": str(case.source_scan_id), "version": scan.scan_version if scan is not None else None},
+            "businessRules": [
+                {
+                    "id": str(rule.id),
+                    "sourceType": rule.source_type.value,
+                    "sourceSymbolId": str(rule.source_symbol_id) if rule.source_symbol_id is not None else None,
+                }
+                for rule_id in case.source_rule_ids
+                if (rule := rules.get(UUID(str(rule_id)))) is not None
+            ],
+            "sourceSymbols": [
+                {
+                    "id": str(symbol.id),
+                    "qualifiedName": symbol.qualified_name,
+                    "sourceFilePath": source_files[symbol.source_file_id].relative_path
+                    if symbol.source_file_id in source_files
+                    else None,
+                    "startLine": symbol.start_line,
+                    "endLine": symbol.end_line,
+                }
+                for symbol_id in case.source_symbol_ids
+                if (symbol := symbols.get(UUID(str(symbol_id)))) is not None
+            ],
+            "agentRun": None
+            if agent_run is None
+            else {
+                "id": str(agent_run.id),
+                "promptVersion": agent_run.prompt_version,
+                "modelSnapshot": agent_run.model_snapshot,
+            },
+        }
+        snapshots[case.id] = (case_snapshot, traceability_snapshot)
+    return snapshots
+
+
+def _merge_request_template(template: dict[str, object], override: dict[str, object]) -> dict[str, object]:
+    """流程覆盖只合并固定请求区段，原用例仍是流程执行的稳定基线。"""
+
+    merged = dict(template)
+    for section, value in override.items():
+        if section in {"path", "query", "headers", "body"} and isinstance(value, dict) and isinstance(merged.get(section), dict):
+            merged[section] = dict(cast(dict[str, object], merged[section])) | value
+        else:
+            merged[section] = value
+    return merged
+
+
+def _extract_step_variables(
+    step: ExecutionStep, body_json: object | None, body_text: str, headers: dict[str, str], status_code: int
+) -> dict[str, object]:
+    """按照创建时冻结的提取规则写入运行变量，提取失败会阻断该步骤的最终通过状态。"""
+
+    values: dict[str, object] = {}
+    for raw_rule in step.variable_extractions:
+        if not isinstance(raw_rule, dict):
+            raise AppError("VARIABLE_EXTRACTION_FAILED", "变量提取规则无效", 409)
+        key, source = raw_rule.get("variableKey"), raw_rule.get("source")
+        expression = raw_rule.get("expression")
+        if not isinstance(key, str) or not isinstance(source, str) or not (expression is None or isinstance(expression, str)):
+            raise AppError("VARIABLE_EXTRACTION_FAILED", "变量提取规则无效", 409)
+        try:
+            extraction_source = VariableExtractionSource(source)
+        except ValueError as exc:
+            raise AppError("VARIABLE_EXTRACTION_FAILED", "变量提取方式无效", 409) from exc
+        values[key] = extract_runtime_value(extraction_source, expression, body_json, body_text, headers, status_code)
+    return values

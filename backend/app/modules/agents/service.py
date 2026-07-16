@@ -107,6 +107,7 @@ async def review_agent_run(
             raise AppError("TEST_CASE_REVIEW_STATE_INVALID", "存在非待审核用例，无法批量审核", 409)
         case.status = target_status
         case.reviewed_by = reviewer.id
+        case.version += 1
     run.status = AgentRunStatus.APPROVED if payload.status == "approved" else AgentRunStatus.DISABLED
     run.current_node = "human_review_interrupt"
     run.completed_at = datetime.now(UTC)

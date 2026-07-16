@@ -2,88 +2,62 @@
 
 ## 开始任务前
 
-1. 阅读 [开发设计文档.md](开发设计文档.md) 和 [开发步骤.md](开发步骤.md)。前者定义 MVP 范围与安全边界，后者定义当前开发阶段。
-2. 检查工作区和 `git status --short`；不要假设规划中的模块已经存在。
-3. 每次只完成用户明确指定的一个阶段或子任务。需求存在语义、安全或数据边界歧义时，先询问，不自行扩展范围。
+1. 阅读 [开发设计文档.md](开发设计文档.md) 和 [开发步骤.md](开发步骤.md)，再检查 `git status --short`。
+2. 仅完成用户指定的里程碑或子任务；语义、安全和数据边界不清晰时先询问。
+3. 保留工作区已有改动，不假设规划中的模块或迁移已实际执行。
 
 ## 当前结构
 
 | 路径 | 职责 |
 | --- | --- |
-| `backend/app/main.py` | FastAPI 入口、生命周期、统一错误和 `request_id` 中间件 |
-| `backend/app/common/` | 公共错误、响应、模型基类和请求上下文 |
-| `backend/app/modules/auth/` | JWT、密码散列、登录、当前用户和鉴权依赖 |
-| `backend/app/modules/users/` | 用户模型、数据访问、服务和管理员用户接口 |
-| `backend/alembic/` | 异步 Alembic 配置与迁移版本 |
-| `frontend/src/api/` | 集中 API 请求封装 |
-| `frontend/src/stores/` | Pinia 跨页面状态 |
-| `frontend/src/router/` | Vue Router 和登录守卫 |
-| `frontend/src/layouts/` | 管理台基础布局 |
-| `frontend/src/views/` | 登录页和项目管理空页 |
-| `frontend/src/styles/` | 全局 Token、重置和通用样式 |
-| `deploy/sql/001_init_business_schema.sql` | PostgreSQL 16 + pgvector 全量业务建表脚本 |
-| `docker-compose.yml` | 仅 PostgreSQL + pgvector 服务 |
+| `backend/app/main.py` | FastAPI 生命周期、统一响应、错误与 `request_id`。 |
+| `backend/app/common/` | 公共错误、响应、模型、网络目标校验与请求上下文。 |
+| `backend/app/modules/` | auth、users、projects、environments、source_scans、knowledge、agents、testcases、executions、test_suites、reports、llm_configs。 |
+| `backend/app/workers/task_worker.py` | PostgreSQL 单进程后台任务 Worker。 |
+| `backend/alembic/versions/` | 迁移版本；最新为 `0018_add_execution_traceability_snapshots`。 |
+| `frontend/src/api/` | 集中 API 封装与领域类型。 |
+| `frontend/src/views/` | 登录、项目、接口、分析、用例、执行、流程与报告页面。 |
+| `deploy/sql/001_init_business_schema.sql` | 历史全量建表脚本；实际初始化优先使用 Alembic 基线，不能在空库中无规划地同时执行两者。 |
+| `docs/` | 交付说明和 MVP 验收用例。 |
 
-## 已实现 API
+## 关键约束
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/health` | 基础健康检查 |
-| `POST` | `/api/v1/auth/login` | 用户登录，返回 JWT |
-| `GET` | `/api/v1/auth/me` | 当前用户 |
-| `POST` | `/api/v1/users` | 管理员创建用户 |
-| `PATCH` | `/api/v1/users/{user_id}/status` | 管理员启用或禁用用户 |
+- 后端使用 Python 3.12、FastAPI、SQLAlchemy Async、Pydantic；Router 只处理 HTTP 边界，Service 管理业务事务，Repository 管理数据访问。
+- 前端使用 Vue 3 Composition API、`<script setup lang="ts">`、TypeScript strict；禁止 `any`，请求只能放在 `frontend/src/api/`。
+- 新增表结构必须新增 Alembic 迁移，不能改写已有版本；迁移不得依赖运行时 ORM。
+- 密钥仅从 `.env` 读取。不得记录或返回密码、JWT、API Key、Cookie、完整源码或未脱敏请求响应。
+- 源码只能访问 `SOURCE_ROOT_ALLOWLIST` 内目录或受控上传文件；禁止读取项目根目录外文件、执行任意 Shell 或自动执行未审核用例。
+- 执行目标必须通过 Host 白名单和 DNS 公网地址校验；生产环境永远禁止执行；写请求必须确认完整目标 Host。
+- `approved` 是唯一可执行用例状态。执行报告的追溯快照必须包含执行、用例、规则、符号、扫描、Prompt 和模型版本，且请求模板和断言配置必须脱敏。
+- 保持最小修改，不重构当前任务无关模块，不新增不必要依赖、脚本、演示数据或文件。
 
-成功响应固定为 `data`、`message`、`requestId`；错误响应固定为 `code`、`message`、`details`、`requestId`。前端只能依据稳定错误码处理逻辑，不能依赖中文错误文案。
+## 已实现能力
 
-## 后端规则
-
-- 使用 Python 3.12、FastAPI、SQLAlchemy Async 和 Pydantic。所有对外函数声明参数与返回类型。
-- Router 只负责 HTTP 边界；业务事务放在 Service；数据访问放在 Repository；不要在 Router 编写业务逻辑。
-- 新增实体继承 `Base`，按需组合 `UUIDPrimaryKeyMixin` 与 `TimestampMixin`。核心关系使用外键；JSONB 仅存放结构不稳定数据。
-- 表结构变更必须新增 Alembic 迁移，不能改写已存在的迁移版本；迁移不能依赖运行时 ORM 状态。
-- 密码使用 `pwdlib[argon2]`；JWT 密钥和初始化管理员密码只从 `.env` 读取，不能写入日志、响应或仓库。
-- 未启用用户、无效 Token 和无管理员权限必须返回稳定业务错误码。
-- 只使用受控数据访问和受控网络目标；后续 Agent 不得读取项目根目录外文件、执行 Shell、直接操作数据库或自动执行未审核用例。
-
-## 前端规则
-
-- 使用 Vue 3 Composition API、`<script setup lang="ts">` 和 TypeScript strict；禁止 `any`。
-- 跨页面认证和任务状态放在 Pinia，局部交互状态保留在组件。
-- 所有 HTTP 请求放在 `frontend/src/api/`；不直接在页面组件内创建请求客户端。
-- 使用 `frontend/src/styles/tokens.css` 中的 Token；不要在组件中散落硬编码颜色、间距和圆角。
-- 管理台视觉遵循冷灰白底、弱阴影、紫色状态轨道。紫色仅用于当前项、智能状态和主要操作。
-- 未实现的业务功能不得提供可操作入口。当前仅显示项目管理入口和其空状态。
-- 交互元素必须保留键盘焦点样式，动画应尊重 `prefers-reduced-motion`。
-
-## 数据库与初始化
-
-- PostgreSQL 服务使用 `pgvector/pgvector:pg16`，数据库时间使用 UTC。
-- `.env.example` 仅为字段模板。复制为 `.env` 后，必须设置真实的 `POSTGRES_PASSWORD`、`JWT_SECRET` 和 `INITIAL_ADMIN_PASSWORD`；不得提交 `.env`。
-- `deploy/sql/001_init_business_schema.sql` 是全量建表脚本，当前 Alembic 迁移仅覆盖 pgvector 扩展和 `users` 表。实际初始化数据库前，必须先统一这两条基线，不能在同一空库中不加规划地同时执行两者。
-- 执行记录需要保留快照。后续删除或禁用用例时，不得破坏既有执行历史。
+- 用户认证、项目与项目权限、源码/OpenAPI 配置、环境和 LLM 配置。
+- Java/Spring 源码扫描、OpenAPI 合并、知识切块与混合检索。
+- Agent 分析、结构化用例生成、人工审核。
+- 单用例/批量执行、变量替换、确定性断言、脱敏 cURL、SSE 状态。
+- 顺序流程、变量提取、报告、失败重试、失败诊断和执行追溯快照。
 
 ## 命令
 
-以下命令来自当前配置文件，尚未在本工作区验证。仅在用户当次明确授权安装、启动、迁移、构建或测试时执行。
+以下命令尚未在当前工作区验证。仅在用户当次明确授权安装、启动、迁移、构建或测试时执行。
 
 | 位置 | 命令 | 用途 |
 | --- | --- | --- |
-| 根目录 | `docker compose up -d postgres` | 启动 PostgreSQL + pgvector |
-| `backend/` | `uv sync` | 安装后端依赖 |
-| `backend/` | `uv run uvicorn app.main:app --reload` | 启动后端 |
-| `backend/` | `uv run alembic -c alembic.ini upgrade head` | 执行迁移 |
-| `backend/` | `uv run ruff check .` | Ruff 检查 |
-| `backend/` | `uv run mypy app` | Mypy 检查 |
-| `backend/` | `uv run pytest` | 后端测试 |
-| `frontend/` | `pnpm install` | 安装前端依赖 |
-| `frontend/` | `pnpm dev` | 启动 Vite 开发服务 |
-| `frontend/` | `pnpm typecheck` | Vue TypeScript 检查 |
-| `frontend/` | `pnpm build` | 前端生产构建 |
+| `backend/` | `uv sync` | 安装后端依赖。 |
+| `backend/` | `uv run alembic -c alembic.ini upgrade head` | 执行迁移。 |
+| `backend/` | `uv run uvicorn app.main:app --reload` | 启动后端。 |
+| `backend/` | `uv run ruff check .` | Ruff 检查。 |
+| `backend/` | `uv run mypy app` | Mypy 检查。 |
+| `backend/` | `uv run pytest` | 后端测试。 |
+| `frontend/` | `pnpm install` | 安装前端依赖。 |
+| `frontend/` | `pnpm dev` | 启动 Vite。 |
+| `frontend/` | `pnpm typecheck` | Vue TypeScript 检查。 |
+| `frontend/` | `pnpm build` | 前端生产构建。 |
 
-## 修改边界
+当前 M7 交付不包含 Docker Compose 部署或启动；不得在未获得明确授权时执行 Docker 命令。
 
-- 回复和产品文案使用中文；代码注释仅在解释关键业务原因时使用中文。
-- 保持最小修改，不重构或优化当前任务无关模块，不引入未被当前阶段使用的依赖。
-- 不创建演示数据、临时脚本或无关文档。
-- 默认不运行安装、构建、测试、迁移、Docker 或服务启动。完成后报告修改文件、未执行验证和剩余风险。
+## 完成后
+
+报告修改文件、实现内容、实际执行的验证以及未验证风险。默认不运行安装、构建、测试、迁移、Docker 或服务启动。
