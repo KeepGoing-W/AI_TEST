@@ -6,7 +6,7 @@ from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, 
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class TaskType(str, enum.Enum):
@@ -66,9 +66,13 @@ class BackgroundTask(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "background_tasks"
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    task_type: Mapped[TaskType] = mapped_column(Enum(TaskType, name="task_type", native_enum=True), nullable=False)
+    task_type: Mapped[TaskType] = mapped_column(
+        Enum(TaskType, name="task_type", native_enum=True, values_callable=enum_values), nullable=False
+    )
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus, name="task_status", native_enum=True), nullable=False, default=TaskStatus.PENDING
+        Enum(TaskStatus, name="task_status", native_enum=True, values_callable=enum_values),
+        nullable=False,
+        default=TaskStatus.PENDING,
     )
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     result: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
@@ -94,7 +98,9 @@ class SourceScan(UUIDPrimaryKeyMixin, Base):
     )
     scan_version: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[ScanStatus] = mapped_column(
-        Enum(ScanStatus, name="scan_status", native_enum=True), nullable=False, default=ScanStatus.PENDING
+        Enum(ScanStatus, name="scan_status", native_enum=True, values_callable=enum_values),
+        nullable=False,
+        default=ScanStatus.PENDING,
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -133,7 +139,7 @@ class CodeSymbol(UUIDPrimaryKeyMixin, Base):
         ForeignKey("code_symbols.id", ondelete="SET NULL"), nullable=True
     )
     symbol_type: Mapped[SymbolType] = mapped_column(
-        Enum(SymbolType, name="symbol_type", native_enum=True), nullable=False
+        Enum(SymbolType, name="symbol_type", native_enum=True, values_callable=enum_values), nullable=False
     )
     name: Mapped[str] = mapped_column(String(512), nullable=False)
     qualified_name: Mapped[str] = mapped_column(Text, nullable=False)
@@ -185,7 +191,7 @@ class SymbolRelation(UUIDPrimaryKeyMixin, Base):
     source_symbol_id: Mapped[UUID] = mapped_column(ForeignKey("code_symbols.id", ondelete="CASCADE"), nullable=False)
     target_symbol_id: Mapped[UUID] = mapped_column(ForeignKey("code_symbols.id", ondelete="CASCADE"), nullable=False)
     relation_type: Mapped[RelationType] = mapped_column(
-        Enum(RelationType, name="relation_type", native_enum=True), nullable=False
+        Enum(RelationType, name="relation_type", native_enum=True, values_callable=enum_values), nullable=False
     )
     metadata_: Mapped[dict[str, object]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

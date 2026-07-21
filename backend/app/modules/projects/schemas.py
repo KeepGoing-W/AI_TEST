@@ -66,6 +66,7 @@ class SourceArtifactResponse(BaseModel):
     source_type: SourceType
     original_name: str | None
     size_bytes: int | None
+    local_path: str | None = None
     created_at: datetime
 
 
@@ -76,3 +77,4 @@ class OpenApiUrlRequest(BaseModel):
 class OpenApiSourceResponse(BaseModel):
     source_type: OpenApiSourceType | None
     configured: bool
+    url: str | None = None

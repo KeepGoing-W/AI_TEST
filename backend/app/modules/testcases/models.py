@@ -5,7 +5,7 @@ from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class TestCaseCategory(str, enum.Enum):
@@ -38,11 +38,13 @@ class TestCase(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     category: Mapped[TestCaseCategory] = mapped_column(
-        Enum(TestCaseCategory, name="test_case_category", native_enum=True), nullable=False
+        Enum(TestCaseCategory, name="test_case_category", native_enum=True, values_callable=enum_values), nullable=False
     )
     priority: Mapped[str] = mapped_column(String(16), nullable=False, default="P1", server_default="P1")
     status: Mapped[TestCaseStatus] = mapped_column(
-        Enum(TestCaseStatus, name="test_case_status", native_enum=True), nullable=False, default=TestCaseStatus.DRAFT
+        Enum(TestCaseStatus, name="test_case_status", native_enum=True, values_callable=enum_values),
+        nullable=False,
+        default=TestCaseStatus.DRAFT,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     preconditions: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)

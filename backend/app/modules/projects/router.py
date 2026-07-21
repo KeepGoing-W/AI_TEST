@@ -9,7 +9,7 @@ from app.common.responses import success_response
 from app.database import get_db_session
 from app.modules.auth.dependencies import get_current_user
 from app.modules.projects.dependencies import AccessibleProject, CurrentAdmin
-from app.modules.projects.models import Project
+from app.modules.projects.models import OpenApiSourceType, Project, SourceType
 from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.schemas import (
     AddProjectMemberRequest,
@@ -22,8 +22,17 @@ from app.modules.projects.schemas import (
     SourceArtifactResponse,
     UpdateProjectRequest,
 )
-from app.modules.projects.service import add_project_member, configure_local_source, configure_zip_source, create_project, delete_project, remove_project_member, update_project
-from app.modules.projects.service import configure_openapi_file, configure_openapi_url
+from app.modules.projects.service import (
+    add_project_member,
+    configure_local_source,
+    configure_openapi_file,
+    configure_openapi_url,
+    configure_zip_source,
+    create_project,
+    delete_project,
+    remove_project_member,
+    update_project,
+)
 from app.modules.users.models import User, UserRole
 
 router = APIRouter(prefix="/projects", tags=["项目管理"])
@@ -31,7 +40,14 @@ router = APIRouter(prefix="/projects", tags=["项目管理"])
 
 @router.get("/{project_id}/openapi")
 async def get_openapi_source(project: AccessibleProject, request: Request) -> Response:
-    return success_response(data=OpenApiSourceResponse(source_type=project.openapi_source_type, configured=project.openapi_location is not None).model_dump(), request_id=request.state.request_id)
+    return success_response(
+        data=OpenApiSourceResponse(
+            source_type=project.openapi_source_type,
+            configured=project.openapi_location is not None,
+            url=project.openapi_location if project.openapi_source_type == OpenApiSourceType.URL else None,
+        ).model_dump(),
+        request_id=request.state.request_id,
+    )
 
 
 @router.put("/{project_id}/openapi/url")
@@ -58,7 +74,16 @@ async def set_openapi_file(
 @router.get("/{project_id}/source")
 async def get_project_source(project: AccessibleProject, request: Request, session: Annotated[AsyncSession, Depends(get_db_session)]) -> Response:
     artifact = await ProjectRepository(session).get_source_artifact(project.id)
-    return success_response(data=None if artifact is None else SourceArtifactResponse.model_validate(artifact).model_dump(), request_id=request.state.request_id)
+    data = None
+    if artifact is not None:
+        data = (
+            SourceArtifactResponse.model_validate(artifact)
+            .model_copy(
+                update={"local_path": artifact.storage_location if artifact.source_type == SourceType.LOCAL_PATH else None}
+            )
+            .model_dump()
+        )
+    return success_response(data=data, request_id=request.state.request_id)
 
 
 @router.put("/{project_id}/source/local")

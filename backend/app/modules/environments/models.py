@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import Boolean, Enum, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class EnvironmentType(str, enum.Enum):
@@ -18,7 +18,9 @@ class TestEnvironment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     base_url: Mapped[str] = mapped_column(Text, nullable=False)
-    environment_type: Mapped[EnvironmentType] = mapped_column(Enum(EnvironmentType, name="environment_type", native_enum=True), nullable=False)
+    environment_type: Mapped[EnvironmentType] = mapped_column(
+        Enum(EnvironmentType, name="environment_type", native_enum=True, values_callable=enum_values), nullable=False
+    )
     allow_write_requests: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     common_headers: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
     host_allowlist: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

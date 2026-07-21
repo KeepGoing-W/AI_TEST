@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class KnowledgeChunkType(str, enum.Enum):
@@ -52,7 +52,7 @@ class KnowledgeChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source_file_id: Mapped[UUID] = mapped_column(ForeignKey("source_files.id", ondelete="CASCADE"), nullable=False)
     code_symbol_id: Mapped[UUID | None] = mapped_column(ForeignKey("code_symbols.id", ondelete="SET NULL"), nullable=True)
     chunk_type: Mapped[KnowledgeChunkType] = mapped_column(
-        Enum(KnowledgeChunkType, name="knowledge_chunk_type", native_enum=True), nullable=False
+        Enum(KnowledgeChunkType, name="knowledge_chunk_type", native_enum=True, values_callable=enum_values), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_sha256: Mapped[str] = mapped_column(Text, nullable=False)
@@ -63,7 +63,7 @@ class KnowledgeChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # 维度与迁移中的 vector(1536) 保持一致，写入前由 Embedding Provider 校验。
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
     embedding_status: Mapped[EmbeddingStatus] = mapped_column(
-        Enum(EmbeddingStatus, name="embedding_status", native_enum=True),
+        Enum(EmbeddingStatus, name="embedding_status", native_enum=True, values_callable=enum_values),
         nullable=False,
         default=EmbeddingStatus.PENDING,
     )
@@ -81,7 +81,13 @@ class BusinessRule(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source_scan_id: Mapped[UUID] = mapped_column(ForeignKey("source_scans.id", ondelete="CASCADE"), nullable=False)
     source_symbol_id: Mapped[UUID | None] = mapped_column(ForeignKey("code_symbols.id", ondelete="SET NULL"), nullable=True)
     source_type: Mapped[BusinessRuleSourceType] = mapped_column(
-        Enum(BusinessRuleSourceType, name="business_rule_source_type", native_enum=True), nullable=False
+        Enum(
+            BusinessRuleSourceType,
+            name="business_rule_source_type",
+            native_enum=True,
+            values_callable=enum_values,
+        ),
+        nullable=False,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     evidence: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)

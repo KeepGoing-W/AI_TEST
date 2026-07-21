@@ -7,6 +7,7 @@ import ApiDefinitionView from "@/views/api-definitions/ApiDefinitionView.vue";
 import AnalysisView from "@/views/analysis/AnalysisView.vue";
 import TestCaseView from "@/views/testcases/TestCaseView.vue";
 import ExecutionView from "@/views/executions/ExecutionView.vue";
+import LlmConfigView from "@/views/llm-configs/LlmConfigView.vue";
 import TestSuiteReportView from "@/views/test-suites/TestSuiteReportView.vue";
 import { useAuthStore } from "@/stores/auth";
 
@@ -21,11 +22,13 @@ const router = createRouter({
       children: [
         { path: "", redirect: { name: "projects" } },
         { path: "projects", name: "projects", component: ProjectListView },
+        { path: "projects/:projectId", name: "project-detail", component: ProjectListView },
         { path: "api-definitions", name: "api-definitions", component: ApiDefinitionView },
         { path: "analysis", name: "analysis", component: AnalysisView },
         { path: "testcases", name: "testcases", component: TestCaseView },
         { path: "executions", name: "executions", component: ExecutionView },
-        { path: "test-suites", name: "test-suites", component: TestSuiteReportView }
+        { path: "test-suites", name: "test-suites", component: TestSuiteReportView },
+        { path: "llm-configs", name: "llm-configs", component: LlmConfigView }
       ]
     }
   ]

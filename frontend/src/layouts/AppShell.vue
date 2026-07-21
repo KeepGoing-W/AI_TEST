@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRouter } from "vue-router";
-import { Bot, ClipboardCheck, FolderKanban, GitBranch, LogOut, PlayCircle, ScanSearch, TestTube2 } from "lucide-vue-next";
+import { useRoute, useRouter } from "vue-router";
+import { Bot, BrainCircuit, ClipboardCheck, FolderKanban, GitBranch, LogOut, PlayCircle, ScanSearch, TestTube2 } from "lucide-vue-next";
 import { NButton, NDropdown } from "naive-ui";
 
 import { useAuthStore } from "@/stores/auth";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const userLabel = computed(() => authStore.user?.display_name ?? authStore.user?.username ?? "当前用户");
+const currentProjectName = computed(() => {
+  const name = route.query.name;
+  return route.name === "project-detail" && typeof name === "string" ? name : "未选择项目";
+});
 const userActions = [{ label: "退出登录", key: "sign-out" }];
 
 function handleUserAction(key: string): void {
@@ -58,6 +63,11 @@ function handleUserAction(key: string): void {
           <GitBranch :size="20" aria-hidden="true" />
           <span class="navigation-label">流程与报告</span>
         </RouterLink>
+        <RouterLink class="navigation-item" :to="{ name: 'llm-configs' }">
+          <span class="navigation-rail" aria-hidden="true"></span>
+          <BrainCircuit :size="20" aria-hidden="true" />
+          <span class="navigation-label">LLM 配置</span>
+        </RouterLink>
       </nav>
       <div class="sidebar-footer">
         <span class="sidebar-status-dot" aria-hidden="true"></span>
@@ -67,7 +77,7 @@ function handleUserAction(key: string): void {
 
     <main class="workspace">
       <header class="topbar">
-        <div class="breadcrumb">项目 / <span>未选择项目</span></div>
+        <div class="breadcrumb"><RouterLink :to="{ name: 'projects' }">项目</RouterLink> / <span>{{ currentProjectName }}</span></div>
         <NDropdown :options="userActions" @select="handleUserAction">
           <NButton class="user-menu" quaternary>
             <span class="user-avatar">{{ userLabel.slice(0, 1) }}</span>
@@ -82,23 +92,25 @@ function handleUserAction(key: string): void {
 </template>
 
 <style scoped>
-.app-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: 100vh; background: var(--color-page); }
-.sidebar { display: flex; flex-direction: column; min-height: 100vh; padding: 20px 14px; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.app-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; background: var(--color-page); }
+.sidebar { display: flex; flex-direction: column; min-height: 0; padding: 20px 14px; overflow: hidden; background: var(--color-surface); border-right: 1px solid var(--color-border); }
 .brand { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 10px; color: var(--color-text); font-weight: 650; letter-spacing: -0.02em; }
 .brand-mark { display: grid; width: 32px; height: 32px; color: var(--color-primary); place-items: center; background: var(--color-primary-softer); border-radius: var(--radius-sm); }
-.navigation { margin-top: 36px; }
+.navigation { margin-top: 36px; overflow-y: auto; }
 .navigation-item { position: relative; display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px; color: var(--color-text-secondary); text-decoration: none; border-radius: var(--radius-sm); }
 .navigation-item.router-link-active { color: var(--color-primary); font-weight: 600; background: var(--color-primary-softer); }
 .navigation-rail { position: absolute; left: -14px; width: 3px; height: 24px; background: transparent; border-radius: 0 3px 3px 0; }
 .navigation-item.router-link-active .navigation-rail { background: var(--color-primary); }
 .sidebar-footer { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 12px 10px; color: var(--color-text-muted); font-size: 12px; }
 .sidebar-status-dot { width: 7px; height: 7px; background: var(--color-success); border-radius: 50%; }
-.workspace { min-width: 0; }
+.workspace { display: grid; grid-template-rows: var(--topbar-height) minmax(0, 1fr); min-width: 0; min-height: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; height: var(--topbar-height); padding: 0 var(--page-padding); background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
 .breadcrumb { color: var(--color-text-secondary); font-size: 13px; }
+.breadcrumb a { color: var(--color-text-secondary); text-decoration: none; }
+.breadcrumb a:hover { color: var(--color-primary); }
 .breadcrumb span { color: var(--color-text-muted); }
 .user-menu { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-secondary); }
 .user-avatar { display: grid; width: 26px; height: 26px; color: var(--color-primary); font-size: 12px; font-weight: 650; place-items: center; background: var(--color-primary-soft); border-radius: 50%; }
-.content-area { min-height: calc(100vh - var(--topbar-height)); padding: var(--page-padding); }
+.content-area { min-height: 0; padding: var(--page-padding); overflow: auto; overscroll-behavior: contain; }
 @media (max-width: 1279px) { .app-shell { grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr); } .sidebar { align-items: center; padding-right: 10px; padding-left: 10px; } .brand-name, .navigation-label, .sidebar-status-text, .user-name { display: none; } .navigation-item { justify-content: center; width: 48px; padding: 0; } .navigation-rail { left: -10px; } }
 </style>

@@ -2,9 +2,8 @@
 
 ## 开始任务前
 
-1. 阅读 [开发设计文档.md](开发设计文档.md) 和 [开发步骤.md](开发步骤.md)，再检查 `git status --short`。
-2. 仅完成用户指定的里程碑或子任务；语义、安全和数据边界不清晰时先询问。
-3. 保留工作区已有改动，不假设规划中的模块或迁移已实际执行。
+1. 仅完成用户指定的里程碑或子任务；语义、安全和数据边界不清晰时先询问。
+2. 保留工作区已有改动，不假设规划中的模块或迁移已实际执行。
 
 ## 当前结构
 
@@ -17,7 +16,7 @@
 | `backend/alembic/versions/` | 迁移版本；最新为 `0018_add_execution_traceability_snapshots`。 |
 | `frontend/src/api/` | 集中 API 封装与领域类型。 |
 | `frontend/src/views/` | 登录、项目、接口、分析、用例、执行、流程与报告页面。 |
-| `deploy/sql/001_init_business_schema.sql` | 历史全量建表脚本；实际初始化优先使用 Alembic 基线，不能在空库中无规划地同时执行两者。 |
+| `deploy/sql/001_init_business_schema.sql` | 与 Alembic `0018` 对齐的空库全量初始化脚本；执行后写入 `alembic_version`，不能再重复执行既有迁移。 |
 | `docs/` | 交付说明和 MVP 验收用例。 |
 
 ## 关键约束
@@ -55,8 +54,6 @@
 | `frontend/` | `pnpm dev` | 启动 Vite。 |
 | `frontend/` | `pnpm typecheck` | Vue TypeScript 检查。 |
 | `frontend/` | `pnpm build` | 前端生产构建。 |
-
-当前 M7 交付不包含 Docker Compose 部署或启动；不得在未获得明确授权时执行 Docker 命令。
 
 ## 完成后
 

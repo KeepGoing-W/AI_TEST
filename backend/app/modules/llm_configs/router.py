@@ -20,17 +20,24 @@ from app.modules.llm_configs.models import LlmConfig
 router = APIRouter(prefix="/llm-configs", tags=["LLM 配置"])
 
 
-class LlmConfigRequest(BaseModel):
+class LlmConfigBaseRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     provider: str = Field(min_length=1, max_length=64)
     base_url: str
     model: str = Field(min_length=1, max_length=256)
-    api_key: str = Field(min_length=1)
     context_window: int = Field(gt=0)
     temperature: float = Field(default=0.2, ge=0, le=2)
     max_output_tokens: int = Field(gt=0)
     is_default: bool = False
     enabled: bool = True
+
+
+class LlmConfigCreateRequest(LlmConfigBaseRequest):
+    api_key: str = Field(min_length=1)
+
+
+class LlmConfigUpdateRequest(LlmConfigBaseRequest):
+    api_key: str | None = Field(default=None, min_length=1)
 
 
 def cipher() -> Fernet:
@@ -45,7 +52,7 @@ def response_item(item: LlmConfig) -> dict[str, object]:
 
 
 @router.post("")
-async def create_config(payload: LlmConfigRequest, request: Request, _: Annotated[object, Depends(require_admin)], session: Annotated[AsyncSession, Depends(get_db_session)]) -> Response:
+async def create_config(payload: LlmConfigCreateRequest, request: Request, _: Annotated[object, Depends(require_admin)], session: Annotated[AsyncSession, Depends(get_db_session)]) -> Response:
     if urlparse(payload.base_url).scheme not in {"http", "https"}:
         raise AppError("LLM_BASE_URL_INVALID", "LLM Base URL 无效", 400)
     if payload.is_default:
@@ -60,6 +67,24 @@ async def create_config(payload: LlmConfigRequest, request: Request, _: Annotate
 async def list_configs(request: Request, _: Annotated[object, Depends(require_admin)], session: Annotated[AsyncSession, Depends(get_db_session)]) -> Response:
     values = await session.scalars(select(LlmConfig).order_by(LlmConfig.created_at.desc()))
     return success_response(data=[response_item(item) for item in values], request_id=request.state.request_id)
+
+
+@router.patch("/{config_id}")
+async def update_config(config_id: UUID, payload: LlmConfigUpdateRequest, request: Request, _: Annotated[object, Depends(require_admin)], session: Annotated[AsyncSession, Depends(get_db_session)]) -> Response:
+    if urlparse(payload.base_url).scheme not in {"http", "https"}:
+        raise AppError("LLM_BASE_URL_INVALID", "LLM Base URL 无效", 400)
+    item = await session.get(LlmConfig, config_id)
+    if item is None:
+        raise AppError("LLM_CONFIG_NOT_FOUND", "LLM 配置不存在", 404)
+    if payload.is_default:
+        await session.execute(update(LlmConfig).where(LlmConfig.id != config_id).values(is_default=False))
+    for field, value in payload.model_dump(exclude={"api_key"}).items():
+        setattr(item, field, value)
+    if payload.api_key is not None:
+        item.encrypted_api_key = cipher().encrypt(payload.api_key.encode()).decode()
+    await session.commit()
+    await session.refresh(item)
+    return success_response(data=response_item(item), request_id=request.state.request_id)
 
 
 @router.post("/{config_id}/test")

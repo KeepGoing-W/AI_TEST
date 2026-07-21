@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class SourceType(str, enum.Enum):
@@ -37,7 +37,7 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     framework: Mapped[str] = mapped_column(String(32), nullable=False, default="spring_boot", server_default="spring_boot")
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     openapi_source_type: Mapped[OpenApiSourceType | None] = mapped_column(
-        Enum(OpenApiSourceType, name="openapi_source_type", native_enum=True), nullable=True
+        Enum(OpenApiSourceType, name="openapi_source_type", native_enum=True, values_callable=enum_values), nullable=True
     )
     openapi_location: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -58,7 +58,9 @@ class SourceArtifact(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "source_artifacts"
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    source_type: Mapped[SourceType] = mapped_column(Enum(SourceType, name="source_type", native_enum=True), nullable=False)
+    source_type: Mapped[SourceType] = mapped_column(
+        Enum(SourceType, name="source_type", native_enum=True, values_callable=enum_values), nullable=False
+    )
     storage_location: Mapped[str] = mapped_column(Text, nullable=False)
     original_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)

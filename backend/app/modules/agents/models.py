@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class AgentRunStatus(str, enum.Enum):
@@ -43,7 +43,9 @@ class AgentRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # 接口集合使用 JSONB 保存，避免为了单次 Agent 运行引入无复用价值的中间表。
     api_definition_ids: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     status: Mapped[AgentRunStatus] = mapped_column(
-        Enum(AgentRunStatus, name="agent_run_status", native_enum=True), nullable=False, default=AgentRunStatus.PENDING
+        Enum(AgentRunStatus, name="agent_run_status", native_enum=True, values_callable=enum_values),
+        nullable=False,
+        default=AgentRunStatus.PENDING,
     )
     current_node: Mapped[str] = mapped_column(String(128), nullable=False, default="validate_input")
     prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -52,7 +54,7 @@ class AgentRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # 只保留结构化摘要、ID 与来源引用，绝不把无限增长的完整消息历史放入运行状态。
     state_summary: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     error_category: Mapped[AgentErrorCategory | None] = mapped_column(
-        Enum(AgentErrorCategory, name="agent_error_category", native_enum=True), nullable=True
+        Enum(AgentErrorCategory, name="agent_error_category", native_enum=True, values_callable=enum_values), nullable=True
     )
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

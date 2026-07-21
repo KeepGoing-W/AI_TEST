@@ -77,6 +77,36 @@ async def list_environments(request: Request, project: AccessibleProject, sessio
     return success_response(data=[{"id": item.id, "name": item.name, "baseUrl": item.base_url, "environmentType": item.environment_type, "allowWriteRequests": item.allow_write_requests, "hostAllowlist": item.host_allowlist} for item in values], request_id=request.state.request_id)
 
 
+@router.patch("/{environment_id}")
+async def update_environment(
+    environment_id: UUID,
+    payload: EnvironmentRequest,
+    request: Request,
+    project: AccessibleProject,
+    _: CurrentAdmin,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    validate_environment(payload)
+    environment = await session.get(TestEnvironment, environment_id)
+    if environment is None or environment.project_id != project.id:
+        raise AppError("ENVIRONMENT_NOT_FOUND", "测试环境不存在", 404)
+    for field, value in payload.model_dump().items():
+        setattr(environment, field, value)
+    await session.commit()
+    await session.refresh(environment)
+    return success_response(
+        data={
+            "id": environment.id,
+            "name": environment.name,
+            "baseUrl": environment.base_url,
+            "environmentType": environment.environment_type,
+            "allowWriteRequests": environment.allow_write_requests,
+            "hostAllowlist": environment.host_allowlist,
+        },
+        request_id=request.state.request_id,
+    )
+
+
 @router.put("/{environment_id}/variables")
 async def set_variable(environment_id: UUID, payload: VariableRequest, request: Request, project: AccessibleProject, _: CurrentAdmin, session: Annotated[AsyncSession, Depends(get_db_session)]) -> Response:
     environment = await session.get(TestEnvironment, environment_id)

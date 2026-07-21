@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Tex
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class ExecutionRunStatus(str, enum.Enum):
@@ -60,7 +60,7 @@ class ExecutionRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     requested_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status: Mapped[ExecutionRunStatus] = mapped_column(
-        Enum(ExecutionRunStatus, name="execution_run_status", native_enum=True),
+        Enum(ExecutionRunStatus, name="execution_run_status", native_enum=True, values_callable=enum_values),
         nullable=False,
         default=ExecutionRunStatus.PENDING,
     )
@@ -86,7 +86,7 @@ class ExecutionStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     test_suite_step_id: Mapped[UUID | None] = mapped_column(ForeignKey("test_suite_steps.id", ondelete="SET NULL"), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[ExecutionStepStatus] = mapped_column(
-        Enum(ExecutionStepStatus, name="execution_step_status", native_enum=True),
+        Enum(ExecutionStepStatus, name="execution_step_status", native_enum=True, values_callable=enum_values),
         nullable=False,
         default=ExecutionStepStatus.PENDING,
     )
@@ -102,7 +102,8 @@ class ExecutionStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     redacted_curl: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_category: Mapped[ExecutionErrorCategory | None] = mapped_column(
-        Enum(ExecutionErrorCategory, name="execution_error_category", native_enum=True), nullable=True
+        Enum(ExecutionErrorCategory, name="execution_error_category", native_enum=True, values_callable=enum_values),
+        nullable=True,
     )
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -5,7 +5,7 @@ from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Text, UniqueC
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class VariableExtractionSource(str, enum.Enum):
@@ -52,6 +52,12 @@ class VariableExtraction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     test_suite_step_id: Mapped[UUID] = mapped_column(ForeignKey("test_suite_steps.id", ondelete="CASCADE"), nullable=False)
     variable_key: Mapped[str] = mapped_column(String(128), nullable=False)
     source: Mapped[VariableExtractionSource] = mapped_column(
-        Enum(VariableExtractionSource, name="variable_extraction_source", native_enum=True), nullable=False
+        Enum(
+            VariableExtractionSource,
+            name="variable_extraction_source",
+            native_enum=True,
+            values_callable=enum_values,
+        ),
+        nullable=False,
     )
     expression: Mapped[str | None] = mapped_column(Text, nullable=True)

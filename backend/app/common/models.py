@@ -1,8 +1,18 @@
 from datetime import datetime
+from enum import Enum
+from typing import TypeVar
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Uuid, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+EnumType = TypeVar("EnumType", bound=Enum)
+
+
+def enum_values(enum_type: type[EnumType]) -> list[str]:
+    """让 SQLAlchemy 持久化字符串枚举值，而不是 Python 成员名。"""
+
+    return [str(item.value) for item in enum_type]
 
 
 class Base(DeclarativeBase):

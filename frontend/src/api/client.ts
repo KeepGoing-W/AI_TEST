@@ -3,6 +3,7 @@ import { ofetch } from "ofetch";
 import type { ApiErrorResponse } from "@/types/domain";
 
 const accessTokenKey = "ai-test-platform.access-token";
+let redirectingToLogin = false;
 export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 export class ApiRequestError extends Error {
@@ -18,6 +19,17 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   return typeof value === "object" && value !== null && "message" in value && "code" in value;
 }
 
+function redirectToLogin(): void {
+  clearAccessToken();
+  if (window.location.pathname === "/login" || redirectingToLogin) {
+    return;
+  }
+  redirectingToLogin = true;
+  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const query = new URLSearchParams({ redirect });
+  window.location.replace(`/login?${query.toString()}`);
+}
+
 export const apiClient = ofetch.create({
   baseURL: apiBaseUrl,
   onRequest({ options }) {
@@ -31,6 +43,9 @@ export const apiClient = ofetch.create({
     options.headers = headers;
   },
   onResponseError({ response }) {
+    if (response.status === 401) {
+      redirectToLogin();
+    }
     const payload = response._data;
     if (isApiErrorResponse(payload)) {
       throw new ApiRequestError(payload.message, payload.code);

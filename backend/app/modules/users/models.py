@@ -3,7 +3,7 @@ import enum
 from sqlalchemy import Boolean, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_values
 
 
 class UserRole(str, enum.Enum):
@@ -22,7 +22,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", native_enum=True),
+        Enum(UserRole, name="user_role", native_enum=True, values_callable=enum_values),
         nullable=False,
         default=UserRole.TEST_MEMBER,
         server_default=UserRole.TEST_MEMBER.value,
